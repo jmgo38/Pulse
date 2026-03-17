@@ -2,6 +2,7 @@ package pulse
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -48,14 +49,19 @@ func TestRunReturnsErrorWhenPhaseDurationIsNotPositive(t *testing.T) {
 	}
 }
 
-func TestRunReturnsZeroValueResultForValidTest(t *testing.T) {
+func TestRunExecutesScenarioOncePerPhase(t *testing.T) {
+	calls := 0
 	test := Test{
 		Config: Config{
 			Phases: []Phase{
 				{Type: PhaseTypeConstant, Duration: time.Second, ArrivalRate: 1},
+				{Type: PhaseTypeConstant, Duration: 2 * time.Second, ArrivalRate: 2},
 			},
 		},
-		Scenario: func(context.Context) error { return nil },
+		Scenario: func(context.Context) error {
+			calls++
+			return nil
+		},
 	}
 
 	got, err := Run(test)
@@ -65,5 +71,28 @@ func TestRunReturnsZeroValueResultForValidTest(t *testing.T) {
 
 	if got != (Result{}) {
 		t.Fatalf("expected zero-value result, got %+v", got)
+	}
+
+	if calls != len(test.Config.Phases) {
+		t.Fatalf("expected %d scenario calls, got %d", len(test.Config.Phases), calls)
+	}
+}
+
+func TestRunPropagatesScenarioError(t *testing.T) {
+	wantErr := errors.New("scenario failed")
+	test := Test{
+		Config: Config{
+			Phases: []Phase{
+				{Type: PhaseTypeConstant, Duration: time.Second, ArrivalRate: 1},
+			},
+		},
+		Scenario: func(context.Context) error {
+			return wantErr
+		},
+	}
+
+	_, err := Run(test)
+	if err != wantErr {
+		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
 }

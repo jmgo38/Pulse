@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/jmgo38/Pulse/engine"
 )
 
 var (
@@ -58,9 +60,15 @@ type Result struct {
 	Latency LatencyStats
 }
 
-// Run validates the test definition and returns a zero-value result for now.
+// Run validates the test definition and executes it through the engine.
 func Run(test Test) (Result, error) {
 	if err := validateTest(test); err != nil {
+		return Result{}, err
+	}
+
+	execution := engine.New(len(test.Config.Phases), test.Scenario)
+
+	if err := execution.Run(context.Background()); err != nil {
 		return Result{}, err
 	}
 
