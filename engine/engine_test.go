@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,7 +20,7 @@ func TestEngineRunExecutesScenarioAcrossPhases(t *testing.T) {
 	}, func(context.Context) error {
 		calls++
 		return nil
-	})
+	}, 4)
 
 	result, err := engine.Run(context.Background())
 	if err != nil {
@@ -48,7 +50,7 @@ func TestEngineRunPropagatesScenarioError(t *testing.T) {
 		{Type: model.PhaseTypeConstant, Duration: 80 * time.Millisecond, ArrivalRate: 50},
 	}, func(context.Context) error {
 		return wantErr
-	})
+	}, 4)
 
 	result, err := engine.Run(context.Background())
 	if err != wantErr {
@@ -69,10 +71,146 @@ func TestEngineRunPropagatesUnsupportedPhaseType(t *testing.T) {
 		{Type: model.PhaseType("unsupported"), Duration: time.Second, ArrivalRate: 1},
 	}, func(context.Context) error {
 		return nil
-	})
+	}, 1)
 
 	_, err := engine.Run(context.Background())
 	if !errors.Is(err, scheduler.ErrUnsupportedPhaseType) {
 		t.Fatalf("expected %v, got %v", scheduler.ErrUnsupportedPhaseType, err)
+	}
+}
+
+func TestEngineRunLimitsConcurrency(t *testing.T) {
+	var running int32
+	var maxRunning int32
+
+	engine := New([]scheduler.Phase{
+		{Type: model.PhaseTypeConstant, Duration: 60 * time.Millisecond, ArrivalRate: 100},
+	}, func(context.Context) error {
+		current := atomic.AddInt32(&running, 1)
+		defer atomic.AddInt32(&running, -1)
+
+		for {
+			recorded := atomic.LoadInt32(&maxRunning)
+			if current <= recorded || atomic.CompareAndSwapInt32(&maxRunning, recorded, current) {
+				break
+			}
+		}
+
+		time.Sleep(20 * time.Millisecond)
+		return nil
+	}, 2)
+
+	result, err := engine.Run(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if result.Total == 0 {
+		t.Fatal("expected executions to run")
+	}
+
+	if got := atomic.LoadInt32(&maxRunning); got > 2 {
+		t.Fatalf("expected max concurrency 2, got %d", got)
+	}
+}
+
+func TestEngineRunWaitsForRunningExecutions(t *testing.T) {
+	var completed atomic.Int32
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+
+	engine := New([]scheduler.Phase{
+		{Type: model.PhaseTypeConstant, Duration: 25 * time.Millisecond, ArrivalRate: 100},
+	}, func(context.Context) error {
+		started <- struct{}{}
+		<-release
+		completed.Add(1)
+		return nil
+	}, 2)
+
+	done := make(chan struct{})
+	var runErr error
+	go func() {
+		defer close(done)
+		_, runErr = engine.Run(context.Background())
+	}()
+
+	for range 2 {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for executions to start")
+		}
+	}
+
+	select {
+	case <-done:
+		t.Fatal("expected engine to wait for running executions")
+	case <-time.After(40 * time.Millisecond):
+	}
+
+	close(release)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for engine to finish")
+	}
+
+	if runErr != nil {
+		t.Fatalf("expected no error, got %v", runErr)
+	}
+
+	if got := completed.Load(); got != 2 {
+		t.Fatalf("expected 2 completed executions, got %d", got)
+	}
+}
+
+func TestEngineRunRespectsContextCancellationWhileAcquiring(t *testing.T) {
+	blocked := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+
+	engine := New([]scheduler.Phase{
+		{Type: model.PhaseTypeConstant, Duration: 50 * time.Millisecond, ArrivalRate: 100},
+	}, func(ctx context.Context) error {
+		once.Do(func() {
+			close(blocked)
+		})
+
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	var runErr error
+	go func() {
+		defer close(done)
+		_, runErr = engine.Run(ctx)
+	}()
+
+	select {
+	case <-blocked:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first execution to block")
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for engine cancellation")
+	}
+
+	close(release)
+
+	if !errors.Is(runErr, context.Canceled) {
+		t.Fatalf("expected %v, got %v", context.Canceled, runErr)
 	}
 }
