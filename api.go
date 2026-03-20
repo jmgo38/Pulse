@@ -37,7 +37,8 @@ type Phase struct {
 
 // Config holds execution configuration for a test.
 type Config struct {
-	Phases []Phase
+	Phases         []Phase
+	MaxConcurrency int
 }
 
 // Test is the root public input for a Pulse run.
@@ -70,7 +71,7 @@ func Run(test Test) (Result, error) {
 		return Result{}, err
 	}
 
-	execution := engine.New(toSchedulerPhases(test.Config.Phases), test.Scenario)
+	execution := engine.New(toSchedulerPhases(test.Config.Phases), test.Scenario, test.Config.MaxConcurrency)
 
 	metricsResult, err := execution.Run(context.Background())
 	result := Result{

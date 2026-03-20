@@ -72,6 +72,7 @@ func TestRunExecutesScenario(t *testing.T) {
 			Phases: []Phase{
 				{Type: PhaseTypeConstant, Duration: 80 * time.Millisecond, ArrivalRate: 50},
 			},
+			MaxConcurrency: 4,
 		},
 		Scenario: func(context.Context) error {
 			calls++
@@ -120,6 +121,7 @@ func TestRunPropagatesScenarioError(t *testing.T) {
 			Phases: []Phase{
 				{Type: PhaseTypeConstant, Duration: 80 * time.Millisecond, ArrivalRate: 50},
 			},
+			MaxConcurrency: 4,
 		},
 		Scenario: func(context.Context) error {
 			return wantErr

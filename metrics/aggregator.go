@@ -1,6 +1,10 @@
 package metrics
 
-import "time"
+import (
+	"math"
+	"sync"
+	"time"
+)
 
 // Result contains the aggregated execution metrics for a run.
 type Result struct {
@@ -12,9 +16,10 @@ type Result struct {
 
 // Aggregator collects execution metrics for the MVP.
 type Aggregator struct {
+	mu         sync.Mutex
 	total      int64
 	failed     int64
-	totalNanos int64
+	meanNanos  float64
 	minLatency time.Duration
 	maxLatency time.Duration
 }
@@ -26,12 +31,15 @@ func NewAggregator() *Aggregator {
 
 // Record stores metrics for a single execution.
 func (a *Aggregator) Record(latency time.Duration, failed bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	a.total++
 	if failed {
 		a.failed++
 	}
 
-	a.totalNanos += latency.Nanoseconds()
+	a.meanNanos += (float64(latency.Nanoseconds()) - a.meanNanos) / float64(a.total)
 	if a.total == 1 || latency < a.minLatency {
 		a.minLatency = latency
 	}
@@ -42,6 +50,9 @@ func (a *Aggregator) Record(latency time.Duration, failed bool) {
 
 // Result returns the aggregated metrics snapshot.
 func (a *Aggregator) Result(duration time.Duration) Result {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	result := Result{
 		Total:    a.total,
 		Failed:   a.failed,
@@ -55,7 +66,7 @@ func (a *Aggregator) Result(duration time.Duration) Result {
 	result.Latency = LatencyStats{
 		Min:  a.minLatency,
 		Max:  a.maxLatency,
-		Mean: time.Duration(a.totalNanos / a.total),
+		Mean: time.Duration(math.Round(a.meanNanos)),
 	}
 
 	return result
