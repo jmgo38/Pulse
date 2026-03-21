@@ -49,6 +49,38 @@ func TestRunReturnsErrorWhenPhaseDurationIsNotPositive(t *testing.T) {
 	}
 }
 
+func TestRunReturnsErrorWhenPhaseTypeIsEmpty(t *testing.T) {
+	test := Test{
+		Config: Config{
+			Phases: []Phase{
+				{Type: "", Duration: time.Second, ArrivalRate: 1},
+			},
+		},
+		Scenario: func(context.Context) error { return nil },
+	}
+
+	_, err := Run(test)
+	if err != errEmptyPhaseType {
+		t.Fatalf("expected %v, got %v", errEmptyPhaseType, err)
+	}
+}
+
+func TestRunReturnsErrorWhenPhaseTypeIsUnsupported(t *testing.T) {
+	test := Test{
+		Config: Config{
+			Phases: []Phase{
+				{Type: PhaseType("custom"), Duration: time.Second, ArrivalRate: 1},
+			},
+		},
+		Scenario: func(context.Context) error { return nil },
+	}
+
+	_, err := Run(test)
+	if err != errUnsupportedPhaseType {
+		t.Fatalf("expected %v, got %v", errUnsupportedPhaseType, err)
+	}
+}
+
 func TestRunReturnsErrorWhenPhaseArrivalRateIsNotPositive(t *testing.T) {
 	test := Test{
 		Config: Config{

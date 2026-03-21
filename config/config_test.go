@@ -295,6 +295,28 @@ func TestLoadRejectsInvalidRampEndpoints(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsUnsupportedPhaseType(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	content := "" +
+		"phases:\n" +
+		"  - type: mystery\n" +
+		"    duration: 1s\n" +
+		"    arrivalRate: 1\n" +
+		"target:\n" +
+		"  method: GET\n" +
+		"  url: https://httpbin.org/get\n"
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	_, err := Load(path)
+	if err != errUnsupportedPhaseType {
+		t.Fatalf("expected %v, got %v", errUnsupportedPhaseType, err)
+	}
+}
+
 func TestLoadRejectsNonPositiveArrivalRate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.yaml")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmgo38/Pulse/engine"
@@ -17,6 +18,8 @@ var (
 	errNonPositivePhase       = errors.New("pulse: phase duration must be positive")
 	errNonPositiveArrivalRate = errors.New("pulse: phase arrival rate must be positive")
 	errInvalidRampEndpoints   = errors.New("pulse: ramp phase from and to must be positive")
+	errEmptyPhaseType         = errors.New("pulse: phase type is required")
+	errUnsupportedPhaseType   = errors.New("pulse: unsupported phase type")
 	errNegativeErrorRate      = errors.New("pulse: threshold error rate must not be negative")
 	errErrorRateAboveOne      = errors.New("pulse: threshold error rate must not be greater than 1")
 	errNegativeMeanLatency    = errors.New("pulse: threshold mean latency must not be negative")
@@ -43,6 +46,16 @@ type Phase struct {
 	// From and To are the arrival rates (per second) at the start and end of a ramp phase.
 	From int
 	To   int
+}
+
+// IsConstant reports whether p is a constant arrival-rate phase.
+func (p Phase) IsConstant() bool {
+	return p.Type == PhaseTypeConstant
+}
+
+// IsRamp reports whether p is a linear ramp phase.
+func (p Phase) IsRamp() bool {
+	return p.Type == PhaseTypeRamp
 }
 
 // Thresholds define basic pass/fail conditions for a run.
@@ -123,15 +136,23 @@ func validateTest(test Test) error {
 			return errNonPositivePhase
 		}
 
-		switch phase.Type {
-		case PhaseTypeRamp:
+		pt := PhaseType(strings.TrimSpace(string(phase.Type)))
+		if pt == "" {
+			return errEmptyPhaseType
+		}
+
+		p := Phase{Type: pt}
+		switch {
+		case p.IsRamp():
 			if phase.From <= 0 || phase.To <= 0 {
 				return errInvalidRampEndpoints
 			}
-		default:
+		case p.IsConstant():
 			if phase.ArrivalRate <= 0 {
 				return errNonPositiveArrivalRate
 			}
+		default:
+			return errUnsupportedPhaseType
 		}
 	}
 
@@ -183,7 +204,7 @@ func toSchedulerPhases(phases []Phase) []scheduler.Phase {
 	schedulerPhases := make([]scheduler.Phase, len(phases))
 	for i := range phases {
 		schedulerPhases[i] = scheduler.Phase{
-			Type:        phases[i].Type,
+			Type:        PhaseType(strings.TrimSpace(string(phases[i].Type))),
 			Duration:    phases[i].Duration,
 			ArrivalRate: phases[i].ArrivalRate,
 			From:        phases[i].From,
