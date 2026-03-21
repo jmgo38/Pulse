@@ -238,6 +238,63 @@ func TestLoadRejectsNonPositivePhaseDuration(t *testing.T) {
 	}
 }
 
+func TestLoadMapsRampPhaseYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	content := "" +
+		"phases:\n" +
+		"  - type: ramp\n" +
+		"    duration: 10s\n" +
+		"    from: 1\n" +
+		"    to: 50\n" +
+		"target:\n" +
+		"  method: GET\n" +
+		"  url: https://httpbin.org/get\n"
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	test, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	phase := test.Config.Phases[0]
+	if phase.Type != pulse.PhaseTypeRamp {
+		t.Fatalf("expected ramp phase, got %s", phase.Type)
+	}
+	if phase.Duration != 10*time.Second {
+		t.Fatalf("expected 10s, got %v", phase.Duration)
+	}
+	if phase.From != 1 || phase.To != 50 {
+		t.Fatalf("expected from 1 to 50, got %d %d", phase.From, phase.To)
+	}
+}
+
+func TestLoadRejectsInvalidRampEndpoints(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	content := "" +
+		"phases:\n" +
+		"  - type: ramp\n" +
+		"    duration: 1s\n" +
+		"    from: 0\n" +
+		"    to: 10\n" +
+		"target:\n" +
+		"  method: GET\n" +
+		"  url: https://httpbin.org/get\n"
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	_, err := Load(path)
+	if err != errInvalidRamp {
+		t.Fatalf("expected %v, got %v", errInvalidRamp, err)
+	}
+}
+
 func TestLoadRejectsNonPositiveArrivalRate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.yaml")

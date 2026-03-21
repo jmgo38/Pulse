@@ -95,3 +95,50 @@ func TestRunReturnsErrorForNonPositiveArrivalRate(t *testing.T) {
 		t.Fatalf("expected %v, got %v", ErrNonPositiveArrivalRate, err)
 	}
 }
+
+func TestRunRampCompletesWithoutPanic(t *testing.T) {
+	err := Run(context.Background(), Phase{
+		Type:     model.PhaseTypeRamp,
+		Duration: 50 * time.Millisecond,
+		From:     2,
+		To:       10,
+	}, func(context.Context) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestRunRampInvokesScenario(t *testing.T) {
+	calls := 0
+	err := Run(context.Background(), Phase{
+		Type:     model.PhaseTypeRamp,
+		Duration: 250 * time.Millisecond,
+		From:     10,
+		To:       30,
+	}, func(context.Context) error {
+		calls++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if calls < 2 {
+		t.Fatalf("expected multiple scenario invocations, got %d", calls)
+	}
+}
+
+func TestRunRampReturnsErrorForInvalidEndpoints(t *testing.T) {
+	err := Run(context.Background(), Phase{
+		Type:     model.PhaseTypeRamp,
+		Duration: time.Second,
+		From:     0,
+		To:       10,
+	}, func(context.Context) error {
+		return nil
+	})
+	if !errors.Is(err, ErrInvalidRampEndpoints) {
+		t.Fatalf("expected %v, got %v", ErrInvalidRampEndpoints, err)
+	}
+}

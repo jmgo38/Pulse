@@ -16,6 +16,7 @@ var (
 	errNilScenario            = errors.New("pulse: scenario must not be nil")
 	errNonPositivePhase       = errors.New("pulse: phase duration must be positive")
 	errNonPositiveArrivalRate = errors.New("pulse: phase arrival rate must be positive")
+	errInvalidRampEndpoints   = errors.New("pulse: ramp phase from and to must be positive")
 	errNegativeErrorRate      = errors.New("pulse: threshold error rate must not be negative")
 	errErrorRateAboveOne      = errors.New("pulse: threshold error rate must not be greater than 1")
 	errNegativeMeanLatency    = errors.New("pulse: threshold mean latency must not be negative")
@@ -30,6 +31,8 @@ type PhaseType = model.PhaseType
 const (
 	// PhaseTypeConstant represents a constant arrival-rate phase.
 	PhaseTypeConstant = model.PhaseTypeConstant
+	// PhaseTypeRamp represents a linear ramp between two arrival rates.
+	PhaseTypeRamp = model.PhaseTypeRamp
 )
 
 // Phase defines the minimal execution shape for the MVP.
@@ -37,6 +40,9 @@ type Phase struct {
 	Type        PhaseType
 	Duration    time.Duration
 	ArrivalRate int
+	// From and To are the arrival rates (per second) at the start and end of a ramp phase.
+	From int
+	To   int
 }
 
 // Thresholds define basic pass/fail conditions for a run.
@@ -117,8 +123,15 @@ func validateTest(test Test) error {
 			return errNonPositivePhase
 		}
 
-		if phase.ArrivalRate <= 0 {
-			return errNonPositiveArrivalRate
+		switch phase.Type {
+		case PhaseTypeRamp:
+			if phase.From <= 0 || phase.To <= 0 {
+				return errInvalidRampEndpoints
+			}
+		default:
+			if phase.ArrivalRate <= 0 {
+				return errNonPositiveArrivalRate
+			}
 		}
 	}
 
@@ -173,6 +186,8 @@ func toSchedulerPhases(phases []Phase) []scheduler.Phase {
 			Type:        phases[i].Type,
 			Duration:    phases[i].Duration,
 			ArrivalRate: phases[i].ArrivalRate,
+			From:        phases[i].From,
+			To:          phases[i].To,
 		}
 	}
 

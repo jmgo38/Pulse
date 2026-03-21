@@ -19,6 +19,7 @@ var (
 	errEmptyPhaseType    = errors.New("config: phase type is required")
 	errNonPositivePhase  = errors.New("config: phase duration must be positive")
 	errNonPositiveRate   = errors.New("config: phase arrival rate must be positive")
+	errInvalidRamp       = errors.New("config: ramp phase from and to must be positive")
 	errEmptyTargetMethod = errors.New("config: target method is required")
 	errEmptyTargetURL    = errors.New("config: target url is required")
 	errUnsupportedMethod = errors.New("config: unsupported target method")
@@ -40,6 +41,8 @@ type phaseConfig struct {
 	Type        string   `yaml:"type"`
 	Duration    duration `yaml:"duration"`
 	ArrivalRate int      `yaml:"arrivalRate"`
+	From        int      `yaml:"from"`
+	To          int      `yaml:"to"`
 }
 
 type targetConfig struct {
@@ -132,8 +135,16 @@ func validateConfig(cfg fileConfig, method string) error {
 			return errNonPositivePhase
 		}
 
-		if phase.ArrivalRate <= 0 {
-			return errNonPositiveRate
+		pt := strings.ToLower(strings.TrimSpace(phase.Type))
+		switch pt {
+		case string(pulse.PhaseTypeRamp):
+			if phase.From <= 0 || phase.To <= 0 {
+				return errInvalidRamp
+			}
+		default:
+			if phase.ArrivalRate <= 0 {
+				return errNonPositiveRate
+			}
 		}
 	}
 
@@ -160,6 +171,8 @@ func toPulsePhases(phases []phaseConfig) []pulse.Phase {
 			Type:        pulse.PhaseType(strings.ToLower(strings.TrimSpace(phases[i].Type))),
 			Duration:    phases[i].Duration.Duration,
 			ArrivalRate: phases[i].ArrivalRate,
+			From:        phases[i].From,
+			To:          phases[i].To,
 		}
 	}
 

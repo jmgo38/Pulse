@@ -65,6 +65,46 @@ func TestRunReturnsErrorWhenPhaseArrivalRateIsNotPositive(t *testing.T) {
 	}
 }
 
+func TestRunReturnsErrorWhenRampEndpointsAreInvalid(t *testing.T) {
+	test := Test{
+		Config: Config{
+			Phases: []Phase{
+				{Type: PhaseTypeRamp, Duration: time.Second, From: 0, To: 5},
+			},
+		},
+		Scenario: func(context.Context) error { return nil },
+	}
+
+	_, err := Run(test)
+	if err != errInvalidRampEndpoints {
+		t.Fatalf("expected %v, got %v", errInvalidRampEndpoints, err)
+	}
+}
+
+func TestRunExecutesRampPhase(t *testing.T) {
+	calls := 0
+	test := Test{
+		Config: Config{
+			Phases: []Phase{
+				{Type: PhaseTypeRamp, Duration: 250 * time.Millisecond, From: 10, To: 25},
+			},
+			MaxConcurrency: 2,
+		},
+		Scenario: func(context.Context) error {
+			calls++
+			return nil
+		},
+	}
+
+	_, err := Run(test)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if calls < 2 {
+		t.Fatalf("expected ramp to invoke scenario multiple times, got %d", calls)
+	}
+}
+
 func TestRunExecutesScenario(t *testing.T) {
 	calls := 0
 	test := Test{
