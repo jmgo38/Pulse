@@ -31,6 +31,23 @@ func constantPhaseCallBounds(r int, d time.Duration, tol float64) (min, max int)
 	return min, max
 }
 
+// rampPhaseCallBounds uses average rate (From+To)/2 over duration d; linear ramp
+// has the same integrated rate. tol widens for stepwise SetRefillRate + polling.
+func rampPhaseCallBounds(from, to int, d time.Duration, tol float64) (min, max int) {
+	exp := 0.5 * float64(from+to) * d.Seconds()
+	low := exp * (1 - tol)
+	high := exp * (1 + tol)
+	min = int(math.Floor(low))
+	max = int(math.Ceil(high))
+	if min < 1 {
+		min = 1
+	}
+	if max < min {
+		max = min
+	}
+	return min, max
+}
+
 func TestRunConstantExecutesScenarioMultipleTimes(t *testing.T) {
 	const (
 		arrivalRate = 25
@@ -138,7 +155,7 @@ func TestRunReturnsErrorForNonPositiveArrivalRate(t *testing.T) {
 func TestRunRampCompletesWithoutPanic(t *testing.T) {
 	err := Run(context.Background(), Phase{
 		Type:     model.PhaseTypeRamp,
-		Duration: 50 * time.Millisecond,
+		Duration: 120 * time.Millisecond,
 		From:     2,
 		To:       10,
 	}, func(context.Context) error {
@@ -150,12 +167,22 @@ func TestRunRampCompletesWithoutPanic(t *testing.T) {
 }
 
 func TestRunRampInvokesScenario(t *testing.T) {
+	const (
+		from     = 10
+		to       = 30
+		duration = 280 * time.Millisecond
+	)
+	minCalls, maxCalls := rampPhaseCallBounds(from, to, duration, 0.30)
+	if minCalls < 2 {
+		minCalls = 2
+	}
+
 	calls := 0
 	err := Run(context.Background(), Phase{
 		Type:     model.PhaseTypeRamp,
-		Duration: 250 * time.Millisecond,
-		From:     10,
-		To:       30,
+		Duration: duration,
+		From:     from,
+		To:       to,
 	}, func(context.Context) error {
 		calls++
 		return nil
@@ -163,8 +190,10 @@ func TestRunRampInvokesScenario(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if calls < 2 {
-		t.Fatalf("expected multiple scenario invocations, got %d", calls)
+	if calls < minCalls || calls > maxCalls {
+		exp := 0.5 * float64(from+to) * duration.Seconds()
+		t.Fatalf("expected calls in [%d,%d] (≈%.1f invocations over %v), got %d",
+			minCalls, maxCalls, exp, duration, calls)
 	}
 }
 
