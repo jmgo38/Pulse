@@ -3,19 +3,50 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/jmgo38/Pulse/model"
 )
 
+// constantPhaseCallBounds returns [min,max] inclusive for the number of scenario
+// invocations expected from a constant phase with drained token bucket pacing,
+// arrivalRate r over duration d. tol is a fraction (e.g. 0.25 for ±25%).
+//
+// Expected calls ≈ r * d (seconds), with slack for first-token delay (~1/r),
+// 1ms polling, and OS timer jitter.
+func constantPhaseCallBounds(r int, d time.Duration, tol float64) (min, max int) {
+	exp := float64(r) * d.Seconds()
+	low := exp * (1 - tol)
+	high := exp * (1 + tol)
+	min = int(math.Floor(low))
+	max = int(math.Ceil(high))
+	if min < 1 {
+		min = 1
+	}
+	if max < min {
+		max = min
+	}
+	return min, max
+}
+
 func TestRunConstantExecutesScenarioMultipleTimes(t *testing.T) {
+	const (
+		arrivalRate = 25
+		duration    = 200 * time.Millisecond
+	)
+	minCalls, maxCalls := constantPhaseCallBounds(arrivalRate, duration, 0.25)
+	if minCalls < 2 {
+		minCalls = 2
+	}
+
 	calls := 0
 
 	err := Run(context.Background(), Phase{
 		Type:        model.PhaseTypeConstant,
-		Duration:    80 * time.Millisecond,
-		ArrivalRate: 50,
+		Duration:    duration,
+		ArrivalRate: arrivalRate,
 	}, func(context.Context) error {
 		calls++
 		return nil
@@ -24,18 +55,25 @@ func TestRunConstantExecutesScenarioMultipleTimes(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if calls < 2 {
-		t.Fatalf("expected scenario to execute multiple times, got %d", calls)
+	if calls < minCalls || calls > maxCalls {
+		t.Fatalf("expected calls in [%d,%d] (≈%d over %v @ %d/s), got %d",
+			minCalls, maxCalls, int(float64(arrivalRate)*duration.Seconds()), duration, arrivalRate, calls)
 	}
 }
 
 func TestRunConstantRoughlyRespectsDurationAndRate(t *testing.T) {
+	const (
+		arrivalRate = 20
+		duration    = 280 * time.Millisecond
+	)
+	minCalls, maxCalls := constantPhaseCallBounds(arrivalRate, duration, 0.25)
+
 	calls := 0
 
 	err := Run(context.Background(), Phase{
 		Type:        model.PhaseTypeConstant,
-		Duration:    250 * time.Millisecond,
-		ArrivalRate: 20,
+		Duration:    duration,
+		ArrivalRate: arrivalRate,
 	}, func(context.Context) error {
 		calls++
 		return nil
@@ -44,9 +82,9 @@ func TestRunConstantRoughlyRespectsDurationAndRate(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Drained token bucket paces at ~arrival rate; bounds stay loose for wall-clock variance.
-	if calls < 4 || calls > 40 {
-		t.Fatalf("expected calls roughly in [4,40], got %d", calls)
+	if calls < minCalls || calls > maxCalls {
+		t.Fatalf("expected calls in [%d,%d] (≈%.1f over %v @ %d/s), got %d",
+			minCalls, maxCalls, float64(arrivalRate)*duration.Seconds(), duration, arrivalRate, calls)
 	}
 }
 
