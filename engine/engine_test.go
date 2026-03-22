@@ -44,7 +44,7 @@ func TestEngineRunExecutesScenarioAcrossPhases(t *testing.T) {
 	}
 }
 
-func TestEngineRunPropagatesScenarioError(t *testing.T) {
+func TestEngineRunRecordsScenarioErrorsWithoutAborting(t *testing.T) {
 	wantErr := errors.New("scenario failed")
 	engine := New([]scheduler.Phase{
 		{Type: model.PhaseTypeConstant, Duration: 80 * time.Millisecond, ArrivalRate: 50},
@@ -53,16 +53,49 @@ func TestEngineRunPropagatesScenarioError(t *testing.T) {
 	}, 4)
 
 	result, err := engine.Run(context.Background())
-	if err != wantErr {
-		t.Fatalf("expected %v, got %v", wantErr, err)
+	if err != nil {
+		t.Fatalf("expected nil engine error, got %v", err)
 	}
 
-	if result.Total != 1 {
-		t.Fatalf("expected total 1, got %d", result.Total)
+	if result.Total < 2 {
+		t.Fatalf("expected run to continue after scenario errors, total %d", result.Total)
 	}
 
-	if result.Failed != 1 {
-		t.Fatalf("expected failed 1, got %d", result.Failed)
+	if result.Failed != result.Total {
+		t.Fatalf("expected all executions failed, total %d failed %d", result.Total, result.Failed)
+	}
+
+	if result.ErrorCounts[wantErr.Error()] != result.Total {
+		t.Fatalf("expected errorCounts to match failures, got %+v total %d", result.ErrorCounts, result.Total)
+	}
+}
+
+func TestEngineRunRunsAllPhasesWhenScenarioAlwaysFails(t *testing.T) {
+	var calls atomic.Int32
+	wantErr := errors.New("fail")
+	engine := New([]scheduler.Phase{
+		{Type: model.PhaseTypeConstant, Duration: 35 * time.Millisecond, ArrivalRate: 40},
+		{Type: model.PhaseTypeConstant, Duration: 35 * time.Millisecond, ArrivalRate: 40},
+	}, func(context.Context) (int, error) {
+		calls.Add(1)
+		return 0, wantErr
+	}, 4)
+
+	result, err := engine.Run(context.Background())
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+
+	if calls.Load() < 2 {
+		t.Fatalf("expected multiple invocations across phases, got %d", calls.Load())
+	}
+
+	if int64(calls.Load()) != result.Total {
+		t.Fatalf("calls %d vs total %d", calls.Load(), result.Total)
+	}
+
+	if result.Failed != result.Total {
+		t.Fatalf("expected all failed, total %d failed %d", result.Total, result.Failed)
 	}
 }
 
