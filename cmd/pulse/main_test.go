@@ -53,11 +53,11 @@ func TestRunPrintsResults(t *testing.T) {
 		"Failed requests: 2\n" +
 		"Duration: 3s\n" +
 		"Min latency: 10ms\n" +
-		"Max latency: 40ms\n" +
-		"Mean latency: 25ms\n" +
 		"P50 latency: 20ms\n" +
+		"Mean latency: 25ms\n" +
 		"P95 latency: 35ms\n" +
-		"P99 latency: 38ms\n"
+		"P99 latency: 38ms\n" +
+		"Max latency: 40ms\n"
 
 	if stdout.String() != want {
 		t.Fatalf("expected output %q, got %q", want, stdout.String())
@@ -98,11 +98,11 @@ func TestRunPrintsResultsWhenExecutionFails(t *testing.T) {
 		"Failed requests: 1\n" +
 		"Duration: 1s\n" +
 		"Min latency: 100ms\n" +
-		"Max latency: 300ms\n" +
-		"Mean latency: 200ms\n" +
 		"P50 latency: 150ms\n" +
+		"Mean latency: 200ms\n" +
 		"P95 latency: 280ms\n" +
-		"P99 latency: 300ms\n"
+		"P99 latency: 300ms\n" +
+		"Max latency: 300ms\n"
 
 	if stdout.String() != want {
 		t.Fatalf("expected output %q, got %q", want, stdout.String())
@@ -198,11 +198,11 @@ func TestRunWritesJSONToFile(t *testing.T) {
 		"Failed requests: 2\n" +
 		"Duration: 1s\n" +
 		"Min latency: 5ms\n" +
-		"Max latency: 25ms\n" +
-		"Mean latency: 15ms\n" +
 		"P50 latency: 14ms\n" +
+		"Mean latency: 15ms\n" +
 		"P95 latency: 24ms\n" +
-		"P99 latency: 25ms\n"
+		"P99 latency: 25ms\n" +
+		"Max latency: 25ms\n"
 
 	if stdout.String() != wantStdout {
 		t.Fatalf("expected output %q, got %q", wantStdout, stdout.String())

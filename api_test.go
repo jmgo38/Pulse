@@ -200,7 +200,7 @@ func TestRunExecutesScenario(t *testing.T) {
 	}
 }
 
-func TestRunPropagatesScenarioError(t *testing.T) {
+func TestRunRecordsScenarioErrorsWithoutAborting(t *testing.T) {
 	wantErr := errors.New("scenario failed")
 	test := Test{
 		Config: Config{
@@ -215,16 +215,16 @@ func TestRunPropagatesScenarioError(t *testing.T) {
 	}
 
 	got, err := Run(test)
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("expected %v, got %v", wantErr, err)
+	if err != nil {
+		t.Fatalf("expected nil error from Run when only scenario fails, got %v", err)
 	}
 
-	if got.Total != 1 {
-		t.Fatalf("expected total 1, got %d", got.Total)
+	if got.Total < 2 {
+		t.Fatalf("expected run to continue, total %d", got.Total)
 	}
 
-	if got.Failed != 1 {
-		t.Fatalf("expected failed 1, got %d", got.Failed)
+	if got.Failed != got.Total {
+		t.Fatalf("expected all executions failed, total %d failed %d", got.Total, got.Failed)
 	}
 
 	if got.Duration <= 0 {
