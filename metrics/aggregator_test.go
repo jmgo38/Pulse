@@ -225,3 +225,16 @@ func TestAggregatorResultReturnsCopiedMaps(t *testing.T) {
 		t.Fatalf("internal statusCounts mutated via snapshot, got %+v", r2.StatusCounts)
 	}
 }
+
+func TestAggregatorResultReturnsCopiedErrorCountsMap(t *testing.T) {
+	a := NewAggregator()
+	a.Record(time.Millisecond, 0, errors.New("boom"))
+
+	r := a.Result(time.Second)
+	r.ErrorCounts["boom"] = 99
+
+	r2 := a.Result(time.Second)
+	if r2.ErrorCounts["boom"] != 1 {
+		t.Fatalf("internal errorCounts mutated via snapshot, got %+v", r2.ErrorCounts)
+	}
+}
