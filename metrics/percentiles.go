@@ -2,8 +2,8 @@ package metrics
 
 import "time"
 
-// percentileFromSorted returns the p-th percentile (0–100) as a discrete
-// sample from sorted: rank k = ceil(p*n/100) in 1..n, zero-based index k-1.
+// percentileFromSorted returns the pth percentile from an ascending-sorted
+// latency slice using a discrete rank rule: k = ceil(p*n/100), then sorted[k-1].
 func percentileFromSorted(sorted []time.Duration, p int) time.Duration {
 	n := len(sorted)
 	if n == 0 {
