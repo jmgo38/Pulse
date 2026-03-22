@@ -7,4 +7,7 @@ type LatencyStats struct {
 	Min  time.Duration
 	Max  time.Duration
 	Mean time.Duration
+	P50  time.Duration
+	P95  time.Duration
+	P99  time.Duration
 }

@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"math"
+	"slices"
 	"sync"
 	"time"
 )
@@ -68,10 +69,17 @@ func (a *Aggregator) Result(duration time.Duration) Result {
 		return result
 	}
 
+	sorted := make([]time.Duration, len(a.latencies))
+	copy(sorted, a.latencies)
+	slices.Sort(sorted)
+
 	result.Latency = LatencyStats{
 		Min:  a.minLatency,
 		Max:  a.maxLatency,
 		Mean: time.Duration(math.Round(a.meanNanos)),
+		P50:  percentileFromSorted(sorted, 50),
+		P95:  percentileFromSorted(sorted, 95),
+		P99:  percentileFromSorted(sorted, 99),
 	}
 
 	return result
