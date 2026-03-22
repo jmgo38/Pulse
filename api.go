@@ -111,6 +111,9 @@ func Run(test Test) (Result, error) {
 		Latency: LatencyStats{
 			Min:  metricsResult.Latency.Min,
 			Mean: metricsResult.Latency.Mean,
+			P50:  metricsResult.Latency.P50,
+			P95:  metricsResult.Latency.P95,
+			P99:  metricsResult.Latency.P99,
 			Max:  metricsResult.Latency.Max,
 		},
 	}

@@ -36,6 +36,16 @@ func TestAggregatorResult(t *testing.T) {
 	if result.Latency.Mean != 20*time.Millisecond {
 		t.Fatalf("expected mean 20ms, got %v", result.Latency.Mean)
 	}
+
+	if result.Latency.P50 != 10*time.Millisecond {
+		t.Fatalf("expected p50 10ms, got %v", result.Latency.P50)
+	}
+	if result.Latency.P95 != 30*time.Millisecond {
+		t.Fatalf("expected p95 30ms, got %v", result.Latency.P95)
+	}
+	if result.Latency.P99 != 30*time.Millisecond {
+		t.Fatalf("expected p99 30ms, got %v", result.Latency.P99)
+	}
 }
 
 func TestAggregatorConcurrentRecord(t *testing.T) {
@@ -85,6 +95,16 @@ func TestAggregatorConcurrentRecord(t *testing.T) {
 	if result.Latency.Mean != 25*time.Millisecond {
 		t.Fatalf("expected mean 25ms, got %v", result.Latency.Mean)
 	}
+
+	if result.Latency.P50 != 20*time.Millisecond {
+		t.Fatalf("expected p50 20ms, got %v", result.Latency.P50)
+	}
+	if result.Latency.P95 != 40*time.Millisecond {
+		t.Fatalf("expected p95 40ms, got %v", result.Latency.P95)
+	}
+	if result.Latency.P99 != 40*time.Millisecond {
+		t.Fatalf("expected p99 40ms, got %v", result.Latency.P99)
+	}
 }
 
 func TestAggregatorRetainsAllLatencies(t *testing.T) {
@@ -101,25 +121,39 @@ func TestAggregatorRetainsAllLatencies(t *testing.T) {
 	}
 }
 
-func TestAggregatorLatenciesSliceLengthMatchesRecordCalls(t *testing.T) {
+func TestPercentileFromSorted(t *testing.T) {
+	s := []time.Duration{
+		1 * time.Millisecond,
+		2 * time.Millisecond,
+		3 * time.Millisecond,
+		4 * time.Millisecond,
+		100 * time.Millisecond,
+	}
+	if got := percentileFromSorted(s, 50); got != 3*time.Millisecond {
+		t.Fatalf("p50: want 3ms, got %v", got)
+	}
+	if got := percentileFromSorted(s, 95); got != 100*time.Millisecond {
+		t.Fatalf("p95: want 100ms, got %v", got)
+	}
+	if got := percentileFromSorted(s, 99); got != 100*time.Millisecond {
+		t.Fatalf("p99: want 100ms, got %v", got)
+	}
+}
+
+func TestAggregatorResultDoesNotMutateRetainedLatencies(t *testing.T) {
 	a := NewAggregator()
-	const n = 10
-	for i := 0; i < n; i++ {
-		a.Record(time.Duration(i+1)*time.Millisecond, i%2 == 0)
-	}
+	a.Record(30*time.Millisecond, false)
+	a.Record(10*time.Millisecond, false)
+	snapshot := append([]time.Duration(nil), a.latencies...)
 
-	if len(a.latencies) != n {
-		t.Fatalf("latencies: want len %d, got %d", n, len(a.latencies))
-	}
+	_ = a.Result(time.Second)
 
-	result := a.Result(time.Second)
-	if result.Total != n {
-		t.Fatalf("Result.Total: want %d, got %d", n, result.Total)
+	if len(a.latencies) != len(snapshot) {
+		t.Fatalf("latencies length: want %d, got %d", len(snapshot), len(a.latencies))
 	}
-	for i := 0; i < n; i++ {
-		want := time.Duration(i+1) * time.Millisecond
-		if a.latencies[i] != want {
-			t.Fatalf("latencies[%d]: want %v, got %v", i, want, a.latencies[i])
+	for i := range snapshot {
+		if a.latencies[i] != snapshot[i] {
+			t.Fatalf("latencies mutated at %d: want %v, got %v", i, snapshot, a.latencies)
 		}
 	}
 }
