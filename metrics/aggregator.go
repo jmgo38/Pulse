@@ -22,11 +22,14 @@ type Aggregator struct {
 	meanNanos  float64
 	minLatency time.Duration
 	maxLatency time.Duration
+	latencies  []time.Duration // retained for future percentile computation
 }
 
 // NewAggregator creates an empty metrics aggregator.
 func NewAggregator() *Aggregator {
-	return &Aggregator{}
+	return &Aggregator{
+		latencies: make([]time.Duration, 0),
+	}
 }
 
 // Record stores metrics for a single execution.
@@ -46,6 +49,8 @@ func (a *Aggregator) Record(latency time.Duration, failed bool) {
 	if latency > a.maxLatency {
 		a.maxLatency = latency
 	}
+
+	a.latencies = append(a.latencies, latency)
 }
 
 // Result returns the aggregated metrics snapshot.

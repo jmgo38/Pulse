@@ -86,3 +86,40 @@ func TestAggregatorConcurrentRecord(t *testing.T) {
 		t.Fatalf("expected mean 25ms, got %v", result.Latency.Mean)
 	}
 }
+
+func TestAggregatorRetainsAllLatencies(t *testing.T) {
+	a := NewAggregator()
+	a.Record(time.Millisecond, false)
+	a.Record(2*time.Millisecond, false)
+	a.Record(3*time.Millisecond, true)
+
+	if len(a.latencies) != 3 {
+		t.Fatalf("expected 3 retained latencies, got %d", len(a.latencies))
+	}
+	if a.latencies[0] != time.Millisecond || a.latencies[1] != 2*time.Millisecond || a.latencies[2] != 3*time.Millisecond {
+		t.Fatalf("unexpected retained order or values: %v", a.latencies)
+	}
+}
+
+func TestAggregatorLatenciesSliceLengthMatchesRecordCalls(t *testing.T) {
+	a := NewAggregator()
+	const n = 10
+	for i := 0; i < n; i++ {
+		a.Record(time.Duration(i+1)*time.Millisecond, i%2 == 0)
+	}
+
+	if len(a.latencies) != n {
+		t.Fatalf("latencies: want len %d, got %d", n, len(a.latencies))
+	}
+
+	result := a.Result(time.Second)
+	if result.Total != n {
+		t.Fatalf("Result.Total: want %d, got %d", n, result.Total)
+	}
+	for i := 0; i < n; i++ {
+		want := time.Duration(i+1) * time.Millisecond
+		if a.latencies[i] != want {
+			t.Fatalf("latencies[%d]: want %v, got %v", i, want, a.latencies[i])
+		}
+	}
+}

@@ -49,6 +49,38 @@ func TestRunReturnsErrorWhenPhaseDurationIsNotPositive(t *testing.T) {
 	}
 }
 
+func TestRunReturnsErrorWhenPhaseTypeIsEmpty(t *testing.T) {
+	test := Test{
+		Config: Config{
+			Phases: []Phase{
+				{Type: "", Duration: time.Second, ArrivalRate: 1},
+			},
+		},
+		Scenario: func(context.Context) error { return nil },
+	}
+
+	_, err := Run(test)
+	if err != errEmptyPhaseType {
+		t.Fatalf("expected %v, got %v", errEmptyPhaseType, err)
+	}
+}
+
+func TestRunReturnsErrorWhenPhaseTypeIsUnsupported(t *testing.T) {
+	test := Test{
+		Config: Config{
+			Phases: []Phase{
+				{Type: PhaseType("custom"), Duration: time.Second, ArrivalRate: 1},
+			},
+		},
+		Scenario: func(context.Context) error { return nil },
+	}
+
+	_, err := Run(test)
+	if err != errUnsupportedPhaseType {
+		t.Fatalf("expected %v, got %v", errUnsupportedPhaseType, err)
+	}
+}
+
 func TestRunReturnsErrorWhenPhaseArrivalRateIsNotPositive(t *testing.T) {
 	test := Test{
 		Config: Config{
@@ -62,6 +94,46 @@ func TestRunReturnsErrorWhenPhaseArrivalRateIsNotPositive(t *testing.T) {
 	_, err := Run(test)
 	if err != errNonPositiveArrivalRate {
 		t.Fatalf("expected %v, got %v", errNonPositiveArrivalRate, err)
+	}
+}
+
+func TestRunReturnsErrorWhenRampEndpointsAreInvalid(t *testing.T) {
+	test := Test{
+		Config: Config{
+			Phases: []Phase{
+				{Type: PhaseTypeRamp, Duration: time.Second, From: 0, To: 5},
+			},
+		},
+		Scenario: func(context.Context) error { return nil },
+	}
+
+	_, err := Run(test)
+	if err != errInvalidRampEndpoints {
+		t.Fatalf("expected %v, got %v", errInvalidRampEndpoints, err)
+	}
+}
+
+func TestRunExecutesRampPhase(t *testing.T) {
+	calls := 0
+	test := Test{
+		Config: Config{
+			Phases: []Phase{
+				{Type: PhaseTypeRamp, Duration: 250 * time.Millisecond, From: 10, To: 25},
+			},
+			MaxConcurrency: 2,
+		},
+		Scenario: func(context.Context) error {
+			calls++
+			return nil
+		},
+	}
+
+	_, err := Run(test)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if calls < 2 {
+		t.Fatalf("expected ramp to invoke scenario multiple times, got %d", calls)
 	}
 }
 
