@@ -82,6 +82,23 @@ func runConstant(ctx context.Context, phase Phase, scenario func(context.Context
 
 func runRamp(ctx context.Context, phase Phase, scenario func(context.Context) error) error {
 	start := time.Now()
+	deadline := start.Add(phase.Duration)
+
+	capacity := phase.From
+	if phase.To > capacity {
+		capacity = phase.To
+	}
+	if capacity < 1 {
+		capacity = 1
+	}
+
+	initialRate := float64(phase.From)
+	if initialRate < 1 {
+		initialRate = 1
+	}
+	bucket := internal.NewDrainedTokenBucket(capacity, initialRate)
+	poll := time.Millisecond
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -90,35 +107,32 @@ func runRamp(ctx context.Context, phase Phase, scenario func(context.Context) er
 		}
 
 		now := time.Now()
-		elapsed := now.Sub(start)
-		if elapsed >= phase.Duration {
+		if !now.Before(deadline) {
 			return nil
 		}
 
+		elapsed := now.Sub(start)
 		frac := float64(elapsed) / float64(phase.Duration)
+		if frac > 1 {
+			frac = 1
+		}
 		rate := float64(phase.From) + float64(phase.To-phase.From)*frac
 		if rate < 1 {
 			rate = 1
 		}
 
-		interval := time.Duration(float64(time.Second) / rate)
-		if interval <= 0 {
-			interval = time.Nanosecond
-		}
+		bucket.SetRefillRate(rate, now)
 
-		remaining := phase.Duration - elapsed
-		if interval > remaining {
-			interval = remaining
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(interval):
-		}
-
-		if err := scenario(ctx); err != nil {
-			return err
+		if bucket.Allow(now) {
+			if err := scenario(ctx); err != nil {
+				return err
+			}
+		} else {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(poll):
+			}
 		}
 	}
 }

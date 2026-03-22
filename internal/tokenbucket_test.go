@@ -166,3 +166,26 @@ func TestTokenBucket_NewTokenBucket_PanicsOnNegativeRefillRate(t *testing.T) {
 		NewTokenBucket(1, -1)
 	})
 }
+
+func TestTokenBucket_SetRefillRate_RefillsAtOldRateThenSwitches(t *testing.T) {
+	tb := NewDrainedTokenBucket(10, 2)
+	tb.SetRefillRate(2, t0)
+	tb.SetRefillRate(10, t0.Add(time.Second))
+	// 1s at 2 tok/s → 2 tokens; same timestamp for Allow → no extra refill.
+	if !tb.Allow(t0.Add(time.Second)) {
+		t.Fatal("expected Allow true after refill at previous rate")
+	}
+	if !tb.Allow(t0.Add(time.Second)) {
+		t.Fatal("expected second token")
+	}
+	if tb.Allow(t0.Add(time.Second)) {
+		t.Fatal("expected bucket empty after two allows at same time")
+	}
+}
+
+func TestTokenBucket_SetRefillRate_PanicsOnNonPositiveRate(t *testing.T) {
+	tb := NewTokenBucket(2, 1)
+	mustPanic(t, "tokenbucket: refillRate must be positive", func() {
+		tb.SetRefillRate(0, t0)
+	})
+}

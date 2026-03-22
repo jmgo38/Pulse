@@ -51,6 +51,25 @@ func NewDrainedTokenBucket(capacity int, refillRate float64) *TokenBucket {
 	return tb
 }
 
+// refillLocked advances token balance from lastRefill to now using tb.refillRate.
+// The caller must hold tb.mu. On first use (lastRefill zero), anchors lastRefill
+// to now without adding tokens.
+func (tb *TokenBucket) refillLocked(now time.Time) {
+	if tb.lastRefill.IsZero() {
+		tb.lastRefill = now
+		return
+	}
+
+	elapsed := now.Sub(tb.lastRefill)
+	if elapsed > 0 {
+		tb.tokens += elapsed.Seconds() * tb.refillRate
+		if tb.tokens > tb.capacity {
+			tb.tokens = tb.capacity
+		}
+		tb.lastRefill = now
+	}
+}
+
 // Allow refills tokens based on elapsed time since the last call, then
 // consumes one token if available. It returns true when the request is
 // allowed, false when the bucket is empty.
@@ -62,19 +81,7 @@ func (tb *TokenBucket) Allow(now time.Time) bool {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
-	// On the very first call, anchor lastRefill without adding tokens.
-	if tb.lastRefill.IsZero() {
-		tb.lastRefill = now
-	}
-
-	elapsed := now.Sub(tb.lastRefill)
-	if elapsed > 0 {
-		tb.tokens += elapsed.Seconds() * tb.refillRate
-		if tb.tokens > tb.capacity {
-			tb.tokens = tb.capacity
-		}
-		tb.lastRefill = now
-	}
+	tb.refillLocked(now)
 
 	if tb.tokens < 1 {
 		return false
@@ -82,4 +89,21 @@ func (tb *TokenBucket) Allow(now time.Time) bool {
 
 	tb.tokens--
 	return true
+}
+
+// SetRefillRate applies refill from lastRefill to now at the current rate,
+// then switches the bucket to rate for future refills. Tokens stay capped at
+// capacity.
+//
+// Panics if rate <= 0, consistent with NewTokenBucket.
+func (tb *TokenBucket) SetRefillRate(rate float64, now time.Time) {
+	if rate <= 0 {
+		panic("tokenbucket: refillRate must be positive")
+	}
+
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+
+	tb.refillLocked(now)
+	tb.refillRate = rate
 }
