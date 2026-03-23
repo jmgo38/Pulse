@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	pulse "github.com/jmgo38/Pulse"
@@ -28,8 +30,71 @@ type runOptions struct {
 func main() {
 	if err := run(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(exitCode(err))
 	}
+	os.Exit(0)
+}
+
+// exitCode maps run errors to process exit codes for CI/CD:
+//   0 — unused here (success exits before calling exitCode)
+//   1 — configuration, runtime, or I/O failure
+//   2 — run finished but threshold evaluation failed (only violation errors)
+func exitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	if isThresholdEvaluationFailureOnly(err) {
+		return 2
+	}
+	return 1
+}
+
+// isThresholdEvaluationFailureOnly reports whether err consists solely of
+// pulse.Run threshold evaluation failures (messages contain "violated").
+// Validation errors such as "pulse: threshold ... must not ..." are not treated
+// as exit 2.
+func isThresholdEvaluationFailureOnly(err error) bool {
+	leaves := unwrapErrorLeaves(err)
+	if len(leaves) == 0 {
+		return false
+	}
+	for _, e := range leaves {
+		msg := e.Error()
+		if !strings.Contains(msg, "pulse: threshold") || !strings.Contains(msg, "violated") {
+			return false
+		}
+	}
+	return true
+}
+
+func unwrapErrorLeaves(err error) []error {
+	seen := map[error]struct{}{}
+	var out []error
+	var walk func(error)
+	walk = func(e error) {
+		if e == nil {
+			return
+		}
+		if _, ok := seen[e]; ok {
+			return
+		}
+		seen[e] = struct{}{}
+
+		switch x := e.(type) {
+		case interface{ Unwrap() []error }:
+			for _, inner := range x.Unwrap() {
+				walk(inner)
+			}
+			return
+		}
+		if u := errors.Unwrap(e); u != nil {
+			walk(u)
+			return
+		}
+		out = append(out, e)
+	}
+	walk(err)
+	return out
 }
 
 func run(args []string, stdout io.Writer) error {
