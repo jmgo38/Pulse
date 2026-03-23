@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +20,9 @@ func TestRunReturnsUsageForInvalidArgs(t *testing.T) {
 	err := run(nil, &stdout)
 	if err != errUsage {
 		t.Fatalf("expected %v, got %v", errUsage, err)
+	}
+	if exitCode(err) != 1 {
+		t.Fatalf("exitCode(usage) = %d, want 1", exitCode(err))
 	}
 }
 
@@ -45,14 +50,18 @@ func TestRunPrintsResults(t *testing.T) {
 			ErrorCounts:  map[string]int64{"http_status_error": 3, "unknown_error": 1},
 			ThresholdOutcomes: []pulse.ThresholdOutcome{
 				{Pass: true, Description: "error_rate < 0.05"},
-				{Pass: false, Description: "mean_latency < 200ms"},
+				{Pass: true, Description: "mean_latency < 200ms"},
 			},
 		}, nil
 	}
 
 	var stdout bytes.Buffer
-	if err := run([]string{"run"}, &stdout); err != nil {
+	err := run([]string{"run"}, &stdout)
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
+	}
+	if exitCode(err) != 0 {
+		t.Fatalf("exitCode(success) = %d, want 0", exitCode(err))
 	}
 
 	want := "" +
@@ -77,10 +86,65 @@ func TestRunPrintsResults(t *testing.T) {
 		"\n" +
 		"Thresholds:\n" +
 		"  PASS error_rate < 0.05\n" +
-		"  FAIL mean_latency < 200ms\n"
+		"  PASS mean_latency < 200ms\n"
 
 	if stdout.String() != want {
 		t.Fatalf("expected output %q, got %q", want, stdout.String())
+	}
+}
+
+func TestRunReturnsThresholdEvaluationError(t *testing.T) {
+	previousExecute := execute
+	t.Cleanup(func() {
+		execute = previousExecute
+	})
+
+	threshErr := fmt.Errorf("pulse: threshold mean latency violated: got 250ms, limit 200ms")
+	execute = func([]string) (pulse.Result, error) {
+		return pulse.Result{
+			Total: 10,
+			ThresholdOutcomes: []pulse.ThresholdOutcome{
+				{Pass: false, Description: "mean_latency < 200ms"},
+			},
+		}, threshErr
+	}
+
+	var stdout bytes.Buffer
+	err := run([]string{"run"}, &stdout)
+	if !errors.Is(err, threshErr) {
+		t.Fatalf("expected threshold error, got %v", err)
+	}
+	if exitCode(err) != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCode(err))
+	}
+	if !strings.Contains(stdout.String(), "FAIL mean_latency") {
+		t.Fatalf("expected threshold FAIL in stdout, got %q", stdout.String())
+	}
+}
+
+func TestExitCode(t *testing.T) {
+	if got := exitCode(nil); got != 0 {
+		t.Fatalf("exitCode(nil) = %d, want 0", got)
+	}
+	if got := exitCode(errors.New("pulse: threshold mean latency violated: got 1s, limit 1ms")); got != 2 {
+		t.Fatalf("threshold violation = %d, want 2", got)
+	}
+	if got := exitCode(errors.New("pulse: threshold error rate must not be negative")); got != 1 {
+		t.Fatalf("validation error = %d, want 1", got)
+	}
+	if got := exitCode(errors.New("config: no such file")); got != 1 {
+		t.Fatalf("config error = %d, want 1", got)
+	}
+	joined := errors.Join(
+		fmt.Errorf("pulse: threshold error rate violated: got 0.5, limit 0.1"),
+		fmt.Errorf("pulse: threshold mean latency violated: got 1s, limit 1ms"),
+	)
+	if got := exitCode(joined); got != 2 {
+		t.Fatalf("joined threshold errors = %d, want 2", got)
+	}
+	mixed := errors.Join(errors.New("scheduler: failed"), fmt.Errorf("pulse: threshold error rate violated: got 0.5, limit 0.1"))
+	if got := exitCode(mixed); got != 1 {
+		t.Fatalf("mixed errors = %d, want 1", got)
 	}
 }
 
@@ -114,6 +178,9 @@ func TestRunPrintsResultsWhenExecutionFails(t *testing.T) {
 	err := run([]string{"run"}, &stdout)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
+	}
+	if exitCode(err) != 1 {
+		t.Fatalf("exitCode(execution err) = %d, want 1", exitCode(err))
 	}
 
 	want := "" +
