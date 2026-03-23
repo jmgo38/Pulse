@@ -5,8 +5,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHTTPClientGetSuccess(t *testing.T) {
@@ -81,6 +83,53 @@ func TestHTTPClientReturnsErrorForFailingStatusCode(t *testing.T) {
 	var httpErr *HTTPStatusError
 	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("expected *HTTPStatusError with 500, got %v", err)
+	}
+}
+
+func TestHTTPClientWithAppliesHeaders(t *testing.T) {
+	var gotPulse, gotCT string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPulse = r.Header.Get("X-Pulse-Test")
+		gotCT = r.Header.Get("Content-Type")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := NewHTTPClientWith(HTTPClientConfig{
+		Headers: map[string]string{
+			"X-Pulse-Test": "hello",
+			"Content-Type": "application/json",
+		},
+	})
+	code, err := client.Get(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, code)
+	}
+	if gotPulse != "hello" {
+		t.Fatalf("X-Pulse-Test: want %q, got %q", "hello", gotPulse)
+	}
+	if gotCT != "application/json" {
+		t.Fatalf("Content-Type: want %q, got %q", "application/json", gotCT)
+	}
+}
+
+func TestHTTPClientWithUsesTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(120 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := NewHTTPClientWith(HTTPClientConfig{Timeout: 40 * time.Millisecond})
+	code, err := client.Get(context.Background(), srv.URL)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if code != 0 {
+		t.Fatalf("expected status code 0 before response, got %d", code)
 	}
 }
 

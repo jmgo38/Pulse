@@ -47,9 +47,11 @@ type phaseConfig struct {
 }
 
 type targetConfig struct {
-	Method string `yaml:"method"`
-	URL    string `yaml:"url"`
-	Body   string `yaml:"body"`
+	Method  string            `yaml:"method"`
+	URL     string            `yaml:"url"`
+	Body    string            `yaml:"body"`
+	Headers map[string]string `yaml:"headers"`
+	Timeout duration          `yaml:"timeout"`
 }
 
 type thresholdsConfig struct {
@@ -63,8 +65,11 @@ type duration struct {
 	time.Duration
 }
 
-var newHTTPClient = func() httpClient {
-	return transport.NewHTTPClient()
+var newHTTPClient = func(cfg fileConfig) httpClient {
+	return transport.NewHTTPClientWith(transport.HTTPClientConfig{
+		Timeout: cfg.Target.Timeout.Duration,
+		Headers: cfg.Target.Headers,
+	})
 }
 
 func (d *duration) UnmarshalYAML(node *yaml.Node) error {
@@ -99,7 +104,7 @@ func Load(path string) (pulse.Test, error) {
 		return pulse.Test{}, err
 	}
 
-	client := newHTTPClient()
+	client := newHTTPClient(cfg)
 	test := pulse.Test{
 		Config: pulse.Config{
 			Phases:         toPulsePhases(cfg.Phases),
