@@ -3,12 +3,15 @@ package config
 import (
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	pulse "github.com/jmgo38/Pulse"
+	"github.com/jmgo38/Pulse/transport"
 )
 
 type stubHTTPClient struct {
@@ -131,7 +134,7 @@ func TestLoadMapsThresholds(t *testing.T) {
 func TestLoadBuildsGETScenario(t *testing.T) {
 	previousNewHTTPClient := newHTTPClient
 	client := &stubHTTPClient{}
-	newHTTPClient = func() httpClient {
+	newHTTPClient = func(_ fileConfig) httpClient {
 		return client
 	}
 	t.Cleanup(func() {
@@ -170,7 +173,7 @@ func TestLoadBuildsGETScenario(t *testing.T) {
 func TestLoadBuildsPOSTScenario(t *testing.T) {
 	previousNewHTTPClient := newHTTPClient
 	client := &stubHTTPClient{}
-	newHTTPClient = func() httpClient {
+	newHTTPClient = func(_ fileConfig) httpClient {
 		return client
 	}
 	t.Cleanup(func() {
@@ -208,6 +211,101 @@ func TestLoadBuildsPOSTScenario(t *testing.T) {
 
 	if client.postBody != "hello" {
 		t.Fatalf("expected POST body %q, got %q", "hello", client.postBody)
+	}
+}
+
+func TestLoadParsesTargetHeadersAndPassesThemToHTTPClient(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	previousNewHTTPClient := newHTTPClient
+	newHTTPClient = func(cfg fileConfig) httpClient {
+		return transport.NewHTTPClientWith(transport.HTTPClientConfig{
+			Timeout: cfg.Target.Timeout.Duration,
+			Headers: cfg.Target.Headers,
+		})
+	}
+	t.Cleanup(func() {
+		newHTTPClient = previousNewHTTPClient
+	})
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	content := "" +
+		"phases:\n" +
+		"  - type: constant\n" +
+		"    duration: 1s\n" +
+		"    arrivalRate: 1\n" +
+		"target:\n" +
+		"  method: GET\n" +
+		"  url: " + srv.URL + "\n" +
+		"  headers:\n" +
+		"    Authorization: Bearer test-token\n"
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write yaml: %v", err)
+	}
+
+	test, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if _, err := test.Scenario(context.Background()); err != nil {
+		t.Fatalf("Scenario: %v", err)
+	}
+
+	if gotAuth != "Bearer test-token" {
+		t.Fatalf("Authorization header: want %q, got %q", "Bearer test-token", gotAuth)
+	}
+}
+
+func TestLoadTargetTimeoutAppliesToHTTPClient(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	previousNewHTTPClient := newHTTPClient
+	newHTTPClient = func(cfg fileConfig) httpClient {
+		return transport.NewHTTPClientWith(transport.HTTPClientConfig{
+			Timeout: cfg.Target.Timeout.Duration,
+			Headers: cfg.Target.Headers,
+		})
+	}
+	t.Cleanup(func() {
+		newHTTPClient = previousNewHTTPClient
+	})
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	content := "" +
+		"phases:\n" +
+		"  - type: constant\n" +
+		"    duration: 1s\n" +
+		"    arrivalRate: 1\n" +
+		"target:\n" +
+		"  method: GET\n" +
+		"  url: " + srv.URL + "\n" +
+		"  timeout: 30ms\n"
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write yaml: %v", err)
+	}
+
+	test, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	_, err = test.Scenario(context.Background())
+	if err == nil {
+		t.Fatal("expected timeout error from slow server, got nil")
 	}
 }
 
