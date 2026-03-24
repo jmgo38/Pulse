@@ -3,6 +3,35 @@
 All notable changes to this project will be documented in this file.
 
 ---
+## [v0.2.0] — 2026-03-24
+
+### Added
+
+**Scheduler**
+- `step` phase: moves arrival rate from `from` to `to` in discrete levels over a given duration (`steps` controls how many levels)
+- `spike` phase: maintains a base rate (`from`), bursts to a peak rate (`to`) for `spikeDuration` starting at `spikeAt`, then returns to base
+
+**Transport**
+- HTTP client now supports PUT, DELETE, and PATCH in addition to GET and POST
+- Generic `Do(ctx, method, url, body)` method for method-agnostic execution
+
+**Public API (`pulse` package)**
+- `ResultHook` type: `func(Result, bool)` — optional callback invoked after every run
+- `OnResult` field in `Config` — receives the full `Result` and a `passed` bool after threshold evaluation
+- `PhaseTypeStep` and `PhaseTypeSpike` constants
+- `Steps`, `SpikeAt`, `SpikeDuration` fields in `Phase`
+
+**Config (YAML)**
+- Supports `step` and `spike` phase types
+- `target.method` now accepts PUT, DELETE, PATCH
+- New fields: `steps`, `spikeAt`, `spikeDuration`
+
+**Examples**
+- `examples/put-json.yaml` — PUT request with JSON body
+- `examples/step.yaml` — step phase from 10 to 100 RPS in 5 levels
+- `examples/spike.yaml` — spike from 20 RPS base to 300 RPS burst
+
+---
 
 ## [v0.1.0] — 2026-03-22
 
