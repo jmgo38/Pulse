@@ -34,6 +34,9 @@ After installing the binaries:
 go install ./cmd/pulse
 go install ./cmd/mockserver
 ```
+
+You can run `pulse` and `mockserver` from your `PATH` instead of using `go run`.
+
 **Expected results** (with the mock server in the suggested mode from [Examples](#examples)):
 
 - [`baseline.yaml`](examples/baseline.yaml) → **PASS**
@@ -179,7 +182,7 @@ With **`--json`**, the CLI prints one indented JSON object to stdout. With **`--
 - **`passed`** — `true` when **every** configured threshold evaluation succeeded; `false` if any failed. Aligns with [exit code](#exit-codes) **0** vs **2** for threshold-only failures.
 - **`thresholds`** — ordered list of individual checks; each entry has a human-readable **`description`** and **`pass`**.
 
-Empty maps or an empty `thresholds` array are valid when there is nothing to report.
+`{}` and `[]` are valid when that part of the result is empty—for instance, no recorded status codes, no classified errors, or no threshold outcomes to list.
 
 ---
 
