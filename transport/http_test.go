@@ -64,6 +64,121 @@ func TestHTTPClientPostSuccess(t *testing.T) {
 	}
 }
 
+func TestHTTPClientPutSuccess(t *testing.T) {
+	var gotMethod, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		payload, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("expected readable body, got %v", err)
+		}
+		gotBody = string(payload)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := NewHTTPClient()
+	code, err := client.Put(context.Background(), srv.URL, strings.NewReader("pulse-put"))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, code)
+	}
+	if gotMethod != http.MethodPut {
+		t.Fatalf("expected method %q, got %q", http.MethodPut, gotMethod)
+	}
+	if gotBody != "pulse-put" {
+		t.Fatalf("expected body %q, got %q", "pulse-put", gotBody)
+	}
+}
+
+func TestHTTPClientDeleteSuccess(t *testing.T) {
+	var gotMethod string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		payload, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("expected readable body, got %v", err)
+		}
+		if len(payload) != 0 {
+			t.Fatalf("expected empty body, got %q", string(payload))
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := NewHTTPClient()
+	code, err := client.Delete(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, code)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Fatalf("expected method %q, got %q", http.MethodDelete, gotMethod)
+	}
+}
+
+func TestHTTPClientPatchSuccess(t *testing.T) {
+	var gotMethod, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		payload, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("expected readable body, got %v", err)
+		}
+		gotBody = string(payload)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := NewHTTPClient()
+	code, err := client.Patch(context.Background(), srv.URL, strings.NewReader("pulse-patch"))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, code)
+	}
+	if gotMethod != http.MethodPatch {
+		t.Fatalf("expected method %q, got %q", http.MethodPatch, gotMethod)
+	}
+	if gotBody != "pulse-patch" {
+		t.Fatalf("expected body %q, got %q", "pulse-patch", gotBody)
+	}
+}
+
+func TestHTTPClientDoSuccess(t *testing.T) {
+	var gotMethod, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		payload, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("expected readable body, got %v", err)
+		}
+		gotBody = string(payload)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := NewHTTPClient()
+	code, err := client.Do(context.Background(), http.MethodPut, srv.URL, strings.NewReader("pulse-do"))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, code)
+	}
+	if gotMethod != http.MethodPut {
+		t.Fatalf("expected method %q, got %q", http.MethodPut, gotMethod)
+	}
+	if gotBody != "pulse-do" {
+		t.Fatalf("expected body %q, got %q", "pulse-do", gotBody)
+	}
+}
+
 func TestHTTPClientReturnsErrorForFailingStatusCode(t *testing.T) {
 	client := &HTTPClient{
 		client: &http.Client{

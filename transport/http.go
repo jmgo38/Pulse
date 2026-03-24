@@ -61,6 +61,26 @@ func (c *HTTPClient) Post(ctx context.Context, url string, body io.Reader) (int,
 	return c.do(ctx, http.MethodPost, url, body)
 }
 
+// Put performs an HTTP PUT request with the provided body.
+func (c *HTTPClient) Put(ctx context.Context, url string, body io.Reader) (int, error) {
+	return c.do(ctx, http.MethodPut, url, body)
+}
+
+// Delete performs an HTTP DELETE request.
+func (c *HTTPClient) Delete(ctx context.Context, url string) (int, error) {
+	return c.do(ctx, http.MethodDelete, url, nil)
+}
+
+// Patch performs an HTTP PATCH request with the provided body.
+func (c *HTTPClient) Patch(ctx context.Context, url string, body io.Reader) (int, error) {
+	return c.do(ctx, http.MethodPatch, url, body)
+}
+
+// Do performs an HTTP request with the provided method and optional body.
+func (c *HTTPClient) Do(ctx context.Context, method, url string, body io.Reader) (int, error) {
+	return c.do(ctx, method, url, body)
+}
+
 func (c *HTTPClient) do(ctx context.Context, method, url string, body io.Reader) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {

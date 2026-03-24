@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -29,6 +30,7 @@ var (
 type httpClient interface {
 	Get(ctx context.Context, url string) (int, error)
 	Post(ctx context.Context, url string, body io.Reader) (int, error)
+	Do(ctx context.Context, method, url string, body io.Reader) (int, error)
 }
 
 type fileConfig struct {
@@ -55,10 +57,10 @@ type targetConfig struct {
 }
 
 type thresholdsConfig struct {
-	ErrorRate       float64  `yaml:"errorRate"`
-	MaxMeanLatency  duration `yaml:"maxMeanLatency"`
-	MaxP95Latency   duration `yaml:"maxP95Latency"`
-	MaxP99Latency   duration `yaml:"maxP99Latency"`
+	ErrorRate      float64  `yaml:"errorRate"`
+	MaxMeanLatency duration `yaml:"maxMeanLatency"`
+	MaxP95Latency  duration `yaml:"maxP95Latency"`
+	MaxP99Latency  duration `yaml:"maxP99Latency"`
 }
 
 type duration struct {
@@ -110,20 +112,24 @@ func Load(path string) (pulse.Test, error) {
 			Phases:         toPulsePhases(cfg.Phases),
 			MaxConcurrency: cfg.MaxConcurrency,
 			Thresholds: pulse.Thresholds{
-				ErrorRate:       cfg.Thresholds.ErrorRate,
-				MaxMeanLatency:  cfg.Thresholds.MaxMeanLatency.Duration,
-				MaxP95Latency:   cfg.Thresholds.MaxP95Latency.Duration,
-				MaxP99Latency:   cfg.Thresholds.MaxP99Latency.Duration,
+				ErrorRate:      cfg.Thresholds.ErrorRate,
+				MaxMeanLatency: cfg.Thresholds.MaxMeanLatency.Duration,
+				MaxP95Latency:  cfg.Thresholds.MaxP95Latency.Duration,
+				MaxP99Latency:  cfg.Thresholds.MaxP99Latency.Duration,
 			},
 		},
 		Scenario: func(ctx context.Context) (int, error) {
 			switch method {
-			case "GET":
+			case http.MethodGet:
 				return client.Get(ctx, cfg.Target.URL)
-			case "POST":
+			case http.MethodPost:
 				return client.Post(ctx, cfg.Target.URL, strings.NewReader(cfg.Target.Body))
 			default:
-				return 0, fmt.Errorf("%w: %s", errUnsupportedMethod, method)
+				var body io.Reader
+				if cfg.Target.Body != "" {
+					body = strings.NewReader(cfg.Target.Body)
+				}
+				return client.Do(ctx, method, cfg.Target.URL, body)
 			}
 		},
 	}
@@ -169,7 +175,7 @@ func validateConfig(cfg fileConfig, method string) error {
 	}
 
 	switch method {
-	case "GET", "POST":
+	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
 		return nil
 	default:
 		return fmt.Errorf("%w: %s", errUnsupportedMethod, method)

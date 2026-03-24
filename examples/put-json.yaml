@@ -1,0 +1,17 @@
+phases:
+  - type: constant
+    duration: 15s
+    arrivalRate: 20
+
+target:
+  method: PUT
+  url: http://localhost:8080/resource/1
+  headers:
+    Content-Type: application/json
+  body: '{"status": "updated"}'
+
+maxConcurrency: 50
+
+thresholds:
+  errorRate: 0.01
+  maxMeanLatency: 300ms
