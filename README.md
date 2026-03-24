@@ -47,12 +47,13 @@ You can run `pulse` and `mockserver` from your `PATH` instead of using `go run`.
 
 ## Features
 
-- **Arrival-rate scheduling** — request-driven load (requests/sec), with constant and ramp phases (not user/VU-based)
+- **Arrival-rate scheduling** — request-driven load (requests/sec), with constant, ramp, step, and spike phases (not user/VU-based)
 - **Bounded concurrency** — configurable goroutine limit prevents runaway resource usage
 - **Metrics aggregation** — total, failed, RPS, latency (min, mean, p50, p95, p99, max), status code distribution, normalized error categories
 - **Thresholds** — `error_rate`, `mean_latency`, `p95_latency`, `p99_latency` with PASS / FAIL in the text report
-- **HTTP transport** — GET and POST; optional `headers`, `body`, and `timeout` in YAML
+- **HTTP transport** — GET, POST, PUT, DELETE, PATCH; optional `headers`, `body`, and `timeout` in YAML
 - **CLI** — `pulse run <config.yaml>` with human-readable text and JSON output modes
+- **Result hook** — optional `OnResult` callback in `Config` for post-run integrations (CI systems, observability pipelines)
 
 ---
 
@@ -96,6 +97,19 @@ phases:
     from: 10
     to: 100
 
+  - type: step
+    duration: 60s
+    from: 10
+    to: 100
+    steps: 5
+
+  - type: spike
+    duration: 60s
+    from: 20
+    to: 300
+    spikeAt: 20s
+    spikeDuration: 10s
+
 target:
   method: GET
   url: https://api.example.com/health
@@ -132,6 +146,9 @@ Ready-to-run scenarios live under [`examples/`](examples/). By default they use 
 | [`mixed-errors.yaml`](examples/mixed-errors.yaml) | Strict `errorRate`; should **FAIL** when failures exceed the limit | `mixed-errors` | `go run ./cmd/pulse run examples/mixed-errors.yaml` |
 | [`timeout.yaml`](examples/timeout.yaml) | Short client timeout vs slow responses; error rate should **FAIL** | `slow` | `go run ./cmd/pulse run examples/timeout.yaml` |
 | [`post-json.yaml`](examples/post-json.yaml) | POST with JSON body and headers | `healthy` (POST body accepted) | `go run ./cmd/pulse run examples/post-json.yaml` |
+| [`put-json.yaml`](examples/put-json.yaml) | PUT with JSON body | `healthy` | `go run ./cmd/pulse run examples/put-json.yaml` |
+| [`step.yaml`](examples/step.yaml) | Step phase: discrete rate levels from 10 to 100 RPS in 5 steps | `healthy` | `go run ./cmd/pulse run examples/step.yaml` |
+| [`spike.yaml`](examples/spike.yaml) | Spike phase: base 20 RPS, burst to 300 RPS for 10s | `healthy` | `go run ./cmd/pulse run examples/spike.yaml` |
 
 ---
 
@@ -260,7 +277,7 @@ pulse run config.yaml
     engine.Run()          Orchestrates phases and concurrency
         │
         ▼
-  scheduler.Run()         Token-bucket pacing; constant and ramp phases
+  scheduler.Run()         Token-bucket pacing; constant, ramp, step, and spike phases
         │
         ▼
    Scenario func          Executes the HTTP request via transport.HTTPClient
@@ -276,11 +293,11 @@ pulse run config.yaml
 
 | Package | Responsibility |
 |---|---|
-| `pulse` (root) | Public API — `Test`, `Config`, `Phase`, `Run`, `Result` |
+| `pulse` (root) | Public API — `Test`, `Config`, `Phase`, `Run`, `Result`, `ResultHook` |
 | `engine` | Runs phases in sequence; manages goroutine lifecycle and concurrency limiter |
 | `scheduler` | Fires scenario calls at the configured arrival rate (token bucket) |
 | `metrics` | Thread-safe aggregation of latency, status codes, and normalized error categories |
-| `transport` | Minimal HTTP client (GET / POST) built on `net/http` |
+| `transport` | Minimal HTTP client (GET, POST, PUT, DELETE, PATCH) built on `net/http` |
 | `config` | YAML loader — maps file config to `pulse.Test` |
 | `internal` | Concurrency limiter (semaphore); token bucket helper |
 
@@ -288,11 +305,15 @@ pulse run config.yaml
 
 ## Roadmap
 
-- **Advanced scheduling controls** — finer-grained pacing and burst tuning
-- **Additional phase types** — step, spike
-- **More HTTP methods** — PUT, DELETE, PATCH
+### v0.2.0 ✓
+- **Step and spike phases** — discrete and burst arrival-rate scheduling
+- **Full HTTP method support** — PUT, DELETE, PATCH
+- **Result hook** — `OnResult` callback for post-run integrations
+
+### Upcoming
 - **Export formats** — CSV, OpenTelemetry
 - **gRPC transport**
+- **Middleware pipeline** — composable scenario wrappers
 
 ---
 
