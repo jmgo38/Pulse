@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,9 @@ type stubHTTPClient struct {
 	getURL   string
 	postURL  string
 	postBody string
+	doMethod string
+	doURL    string
+	doBody   string
 }
 
 func (c *stubHTTPClient) Get(_ context.Context, url string) (int, error) {
@@ -34,6 +38,19 @@ func (c *stubHTTPClient) Post(_ context.Context, url string, body io.Reader) (in
 
 	c.postBody = string(payload)
 	return 201, nil
+}
+
+func (c *stubHTTPClient) Do(_ context.Context, method, url string, body io.Reader) (int, error) {
+	c.doMethod = method
+	c.doURL = url
+	if body != nil {
+		payload, err := io.ReadAll(body)
+		if err != nil {
+			return 0, err
+		}
+		c.doBody = string(payload)
+	}
+	return 202, nil
 }
 
 func TestLoadMapsYAMLToPulseTest(t *testing.T) {
@@ -211,6 +228,52 @@ func TestLoadBuildsPOSTScenario(t *testing.T) {
 
 	if client.postBody != "hello" {
 		t.Fatalf("expected POST body %q, got %q", "hello", client.postBody)
+	}
+}
+
+func TestLoadBuildsPUTScenarioWithDo(t *testing.T) {
+	previousNewHTTPClient := newHTTPClient
+	client := &stubHTTPClient{}
+	newHTTPClient = func(_ fileConfig) httpClient {
+		return client
+	}
+	t.Cleanup(func() {
+		newHTTPClient = previousNewHTTPClient
+	})
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	content := "" +
+		"phases:\n" +
+		"  - type: constant\n" +
+		"    duration: 1s\n" +
+		"    arrivalRate: 1\n" +
+		"target:\n" +
+		"  method: PUT\n" +
+		"  url: https://pulse.test/resource/1\n" +
+		"  body: updated\n"
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	test, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if _, err := test.Scenario(context.Background()); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if client.doMethod != http.MethodPut {
+		t.Fatalf("expected method %q, got %q", http.MethodPut, client.doMethod)
+	}
+	if client.doURL != "https://pulse.test/resource/1" {
+		t.Fatalf("expected PUT url %q, got %q", "https://pulse.test/resource/1", client.doURL)
+	}
+	if client.doBody != "updated" {
+		t.Fatalf("expected PUT body %q, got %q", "updated", client.doBody)
 	}
 }
 
@@ -444,5 +507,35 @@ func TestLoadRejectsNonPositiveArrivalRate(t *testing.T) {
 	_, err := Load(path)
 	if err != errNonPositiveRate {
 		t.Fatalf("expected %v, got %v", errNonPositiveRate, err)
+	}
+}
+
+func TestValidateConfigAcceptsPUTDeleteAndPATCH(t *testing.T) {
+	cfg := fileConfig{
+		Phases: []phaseConfig{
+			{Type: "constant", Duration: duration{Duration: time.Second}, ArrivalRate: 1},
+		},
+		Target: targetConfig{URL: "https://pulse.test"},
+	}
+
+	methods := []string{http.MethodPut, http.MethodDelete, http.MethodPatch}
+	for _, method := range methods {
+		if err := validateConfig(cfg, method); err != nil {
+			t.Fatalf("validateConfig(%q): expected no error, got %v", method, err)
+		}
+	}
+}
+
+func TestValidateConfigRejectsCONNECT(t *testing.T) {
+	cfg := fileConfig{
+		Phases: []phaseConfig{
+			{Type: "constant", Duration: duration{Duration: time.Second}, ArrivalRate: 1},
+		},
+		Target: targetConfig{URL: "https://pulse.test"},
+	}
+
+	err := validateConfig(cfg, http.MethodConnect)
+	if !errors.Is(err, errUnsupportedMethod) {
+		t.Fatalf("expected %v, got %v", errUnsupportedMethod, err)
 	}
 }
