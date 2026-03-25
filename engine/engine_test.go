@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmgo38/Pulse/model"
-	"github.com/jmgo38/Pulse/scheduler"
+	"algoryn.io/pulse/model"
+	"algoryn.io/pulse/scheduler"
 )
 
 func TestEngineRunExecutesScenarioAcrossPhases(t *testing.T) {

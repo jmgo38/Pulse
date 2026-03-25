@@ -1,4 +1,4 @@
-module github.com/jmgo38/Pulse
+module algoryn.io/pulse
 
 go 1.25.5
 

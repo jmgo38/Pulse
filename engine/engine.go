@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jmgo38/Pulse/internal"
-	"github.com/jmgo38/Pulse/metrics"
-	"github.com/jmgo38/Pulse/scheduler"
+	"algoryn.io/pulse/internal"
+	"algoryn.io/pulse/metrics"
+	"algoryn.io/pulse/scheduler"
 )
 
 // Engine executes a test definition.

@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"time"
 
-	pulse "github.com/jmgo38/Pulse"
-	"github.com/jmgo38/Pulse/config"
-	"github.com/jmgo38/Pulse/transport"
+	pulse "algoryn.io/pulse"
+	"algoryn.io/pulse/config"
+	"algoryn.io/pulse/transport"
 )
 
 const usageMessage = "usage: pulse run [config.yaml] [--json] [--out <file>]\n\nRuns a sample load test or a YAML-defined test"

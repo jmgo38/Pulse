@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jmgo38/Pulse/internal"
-	"github.com/jmgo38/Pulse/model"
+	"algoryn.io/pulse/internal"
+	"algoryn.io/pulse/model"
 )
 
 var (

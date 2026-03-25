@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/jmgo38/Pulse/transport"
+	"algoryn.io/pulse/transport"
 )
 
 func TestNormalizeError(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jmgo38/Pulse/transport"
+	"algoryn.io/pulse/transport"
 )
 
 // normalizeError maps an error to a stable category for ErrorCounts.

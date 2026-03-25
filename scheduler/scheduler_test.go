@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmgo38/Pulse/model"
+	"algoryn.io/pulse/model"
 )
 
 // constantPhaseCallBounds returns [min,max] inclusive for the number of scenario

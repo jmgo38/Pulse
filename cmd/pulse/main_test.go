@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	pulse "github.com/jmgo38/Pulse"
+	pulse "algoryn.io/pulse"
 )
 
 type decodedJSONResult struct {

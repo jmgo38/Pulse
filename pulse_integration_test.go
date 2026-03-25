@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmgo38/Pulse/transport"
+	"algoryn.io/pulse/transport"
 )
 
 func TestIntegrationRunEndToEndWithHTTPThresholds(t *testing.T) {

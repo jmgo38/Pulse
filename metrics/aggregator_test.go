@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmgo38/Pulse/transport"
+	"algoryn.io/pulse/transport"
 )
 
 func TestAggregatorResult(t *testing.T) {

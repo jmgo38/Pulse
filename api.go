@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmgo38/Pulse/engine"
-	"github.com/jmgo38/Pulse/model"
-	"github.com/jmgo38/Pulse/scheduler"
+	"algoryn.io/pulse/engine"
+	"algoryn.io/pulse/model"
+	"algoryn.io/pulse/scheduler"
 )
 
 var (

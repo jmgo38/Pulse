@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	pulse "github.com/jmgo38/Pulse"
-	"github.com/jmgo38/Pulse/transport"
+	pulse "algoryn.io/pulse"
+	"algoryn.io/pulse/transport"
 	"gopkg.in/yaml.v3"
 )
 
