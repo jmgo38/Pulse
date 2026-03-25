@@ -2,4 +2,9 @@ module algoryn.io/pulse
 
 go 1.25.5
 
-require gopkg.in/yaml.v3 v3.0.1
+require (
+	algoryn.io/fabric v0.0.0
+	gopkg.in/yaml.v3 v3.0.1
+)
+
+replace algoryn.io/fabric => ../fabric
