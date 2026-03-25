@@ -37,6 +37,11 @@ go install ./cmd/mockserver
 
 You can run `pulse` and `mockserver` from your `PATH` instead of using `go run`.
 
+**Use as a library** in your Go project:
+```sh
+go get algoryn.io/pulse@latest
+```
+
 **Expected results** (with the mock server in the suggested mode from [Examples](#examples)):
 
 - [`baseline.yaml`](examples/baseline.yaml) → **PASS**
@@ -310,10 +315,27 @@ pulse run config.yaml
 - **Full HTTP method support** — PUT, DELETE, PATCH
 - **Result hook** — `OnResult` callback for post-run integrations
 
+### v0.3.0 ✓
+- **Algoryn ecosystem** — module path migrated to `algoryn.io/pulse`
+- **Shared contracts** — integrated with `algoryn.io/fabric`
+
 ### Upcoming
 - **Export formats** — CSV, OpenTelemetry
 - **gRPC transport**
 - **Middleware pipeline** — composable scenario wrappers
+
+---
+
+## Part of Algoryn Fabric
+
+Pulse is part of the [Algoryn Fabric](https://github.com/algoryn-io/fabric) ecosystem —
+an open source infrastructure toolkit for Go teams building reliable products.
+
+| Tool | What it does | Status |
+|------|-------------|--------|
+| **Pulse** | Load testing & chaos engineering | `v0.3.0` |
+| **Relay** | API Gateway & observability | `coming soon` |
+| **Beacon** | Alerting & on-call | `planned` |
 
 ---
 
