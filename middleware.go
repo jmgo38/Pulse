@@ -11,7 +11,12 @@ import (
 type Middleware func(Scenario) Scenario
 
 // ErrInjected is returned by WithErrorRate when a fault is injected.
-var ErrInjected = errors.New("pulse: injected fault")
+var (
+	ErrInjected = errors.New("pulse: injected fault")
+	// ErrBulkheadFull is returned by WithBulkhead when the concurrency
+	// limit is reached and the context expires before a slot opens.
+	ErrBulkheadFull = errors.New("pulse: bulkhead full")
+)
 
 // Chain applies middlewares to a Scenario in order.
 // The first middleware is the outermost wrapper.
@@ -110,6 +115,57 @@ func WithStatusCode(code int, rate float64) Middleware {
 			if rand.Float64() < rate {
 				return code, ErrInjected
 			}
+			return next(ctx)
+		}
+	}
+}
+
+// WithRetry returns a Middleware that retries a failed scenario
+// up to n times with a fixed backoff between attempts.
+func WithRetry(n int, backoff time.Duration) Middleware {
+	return func(next Scenario) Scenario {
+		return func(ctx context.Context) (int, error) {
+			var (
+				status int
+				err    error
+			)
+			for i := 0; i <= n; i++ {
+				status, err = next(ctx)
+				if err == nil {
+					return status, nil
+				}
+				if i < n {
+					timer := time.NewTimer(backoff)
+					select {
+					case <-timer.C:
+						timer.Stop()
+					case <-ctx.Done():
+						timer.Stop()
+						return 0, ctx.Err()
+					}
+				}
+			}
+			return status, err
+		}
+	}
+}
+
+// WithBulkhead returns a Middleware that limits the number of concurrent
+// executions of a scenario.
+func WithBulkhead(maxConcurrent int) Middleware {
+	if maxConcurrent <= 0 {
+		maxConcurrent = 1
+	}
+	sem := make(chan struct{}, maxConcurrent)
+
+	return func(next Scenario) Scenario {
+		return func(ctx context.Context) (int, error) {
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return 0, ErrBulkheadFull
+			}
+			defer func() { <-sem }()
 			return next(ctx)
 		}
 	}

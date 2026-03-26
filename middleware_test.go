@@ -391,3 +391,294 @@ func TestWithStatusCodeAndWithJitterComposeWithRunT(t *testing.T) {
 		t.Fatalf("expected Total > 0, got %d", result.Total)
 	}
 }
+
+func TestWithRetryRetriesUntilSuccess(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		calls int
+	)
+
+	scenario := Apply(func(context.Context) (int, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		calls++
+		if calls <= 2 {
+			return 0, errors.New("temporary failure")
+		}
+		return http.StatusOK, nil
+	}, WithRetry(3, time.Millisecond))
+
+	status, err := scenario(context.Background())
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+	if calls != 3 {
+		t.Fatalf("expected 3 calls, got %d", calls)
+	}
+}
+
+func TestWithRetryReturnsLastErrorWhenAllAttemptsFail(t *testing.T) {
+	var (
+		mu      sync.Mutex
+		calls   int
+		wantErr = errors.New("always fails")
+	)
+
+	scenario := Apply(func(context.Context) (int, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		return 0, wantErr
+	}, WithRetry(2, time.Millisecond))
+
+	status, err := scenario(context.Background())
+
+	if status != 0 {
+		t.Fatalf("expected status 0, got %d", status)
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected %v, got %v", wantErr, err)
+	}
+	if calls != 3 {
+		t.Fatalf("expected 3 calls, got %d", calls)
+	}
+}
+
+func TestWithRetryRespectsContextCancellationDuringBackoff(t *testing.T) {
+	scenario := Apply(func(context.Context) (int, error) {
+		return 0, errors.New("always fails")
+	}, WithRetry(5, 500*time.Millisecond))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(20*time.Millisecond, cancel)
+
+	startedAt := time.Now()
+	status, err := scenario(ctx)
+	elapsed := time.Since(startedAt)
+
+	if status != 0 {
+		t.Fatalf("expected status 0, got %d", status)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+	if elapsed >= 500*time.Millisecond {
+		t.Fatalf("expected cancellation before full backoff, got %v", elapsed)
+	}
+}
+
+func TestWithRetryZeroDoesNotRetry(t *testing.T) {
+	calls := 0
+
+	scenario := Apply(func(context.Context) (int, error) {
+		calls++
+		return 0, errors.New("always fails")
+	}, WithRetry(0, time.Millisecond))
+
+	_, _ = scenario(context.Background())
+
+	if calls != 1 {
+		t.Fatalf("expected 1 call, got %d", calls)
+	}
+}
+
+func TestWithBulkheadAllowsUpToMaxConcurrent(t *testing.T) {
+	entered := make(chan struct{}, 5)
+	release := make(chan struct{})
+
+	scenario := Apply(func(context.Context) (int, error) {
+		entered <- struct{}{}
+		<-release
+		return http.StatusOK, nil
+	}, WithBulkhead(2))
+
+	type result struct {
+		status int
+		err    error
+	}
+
+	results := make(chan result, 5)
+
+	for range 2 {
+		go func() {
+			status, err := scenario(context.Background())
+			results <- result{status: status, err: err}
+		}()
+	}
+
+	for range 2 {
+		select {
+		case <-entered:
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("expected first two goroutines to enter immediately")
+		}
+	}
+
+	waiterCancels := make([]context.CancelFunc, 3)
+	for i := range 3 {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
+		waiterCancels[i] = cancel
+		go func(i int) {
+			status, err := scenario(ctx)
+			results <- result{status: status, err: err}
+		}(i)
+	}
+	defer func() {
+		for _, cancel := range waiterCancels {
+			if cancel != nil {
+				cancel()
+			}
+		}
+	}()
+
+	select {
+	case <-entered:
+		t.Fatal("expected no third goroutine to enter while bulkhead is full")
+	case <-time.After(40 * time.Millisecond):
+	}
+
+	close(release)
+
+	var successCount, bulkheadFullCount int
+	for range 5 {
+		r := <-results
+		if errors.Is(r.err, ErrBulkheadFull) {
+			bulkheadFullCount++
+			continue
+		}
+		if r.err != nil {
+			t.Fatalf("unexpected error: %v", r.err)
+		}
+		if r.status != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", r.status)
+		}
+		successCount++
+	}
+
+	if successCount != 2 {
+		t.Fatalf("expected 2 successful executions, got %d", successCount)
+	}
+	if bulkheadFullCount != 3 {
+		t.Fatalf("expected 3 ErrBulkheadFull results, got %d", bulkheadFullCount)
+	}
+}
+
+func TestWithBulkheadReturnsErrBulkheadFullWhenContextExpires(t *testing.T) {
+	started := make(chan struct{}, 1)
+
+	scenario := Apply(func(ctx context.Context) (int, error) {
+		started <- struct{}{}
+		select {
+		case <-time.After(100 * time.Millisecond):
+			return http.StatusOK, nil
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		}
+	}, WithBulkhead(1))
+
+	firstDone := make(chan struct{})
+	go func() {
+		_, _ = scenario(context.Background())
+		close(firstDone)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected first goroutine to acquire bulkhead slot")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	status, err := scenario(ctx)
+
+	if status != 0 {
+		t.Fatalf("expected status 0, got %d", status)
+	}
+	if !errors.Is(err, ErrBulkheadFull) {
+		t.Fatalf("expected ErrBulkheadFull, got %v", err)
+	}
+
+	<-firstDone
+}
+
+func TestWithBulkheadZeroUsesOne(t *testing.T) {
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+
+	scenario := Apply(func(context.Context) (int, error) {
+		started <- struct{}{}
+		<-release
+		return http.StatusOK, nil
+	}, WithBulkhead(0))
+
+	firstDone := make(chan struct{})
+	go func() {
+		_, _ = scenario(context.Background())
+		close(firstDone)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected first goroutine to acquire slot")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	status, err := scenario(ctx)
+	if status != 0 {
+		t.Fatalf("expected status 0, got %d", status)
+	}
+	if !errors.Is(err, ErrBulkheadFull) {
+		t.Fatalf("expected ErrBulkheadFull, got %v", err)
+	}
+
+	close(release)
+	<-firstDone
+}
+
+func TestWithRetryAndWithBulkheadComposeWithRunT(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := &http.Client{Timeout: time.Second}
+
+	baseScenario := func(ctx context.Context) (int, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+		if err != nil {
+			return 0, err
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return 0, err
+		}
+		defer resp.Body.Close()
+
+		return resp.StatusCode, nil
+	}
+
+	test := Test{
+		Config: Config{
+			Phases: []Phase{
+				{Type: PhaseTypeConstant, Duration: 80 * time.Millisecond, ArrivalRate: 20},
+			},
+			MaxConcurrency: 4,
+		},
+		Scenario: Apply(baseScenario, WithBulkhead(2), WithRetry(1, time.Millisecond)),
+	}
+
+	result := RunT(t, test)
+	if result.Total <= 0 {
+		t.Fatalf("expected Total > 0, got %d", result.Total)
+	}
+}
