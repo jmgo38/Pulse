@@ -41,6 +41,7 @@ type jsonLatency struct {
 	MinMS  float64 `json:"min_ms"`
 	P50MS  float64 `json:"p50_ms"`
 	MeanMS float64 `json:"mean_ms"`
+	P90MS  float64 `json:"p90_ms"`
 	P95MS  float64 `json:"p95_ms"`
 	P99MS  float64 `json:"p99_ms"`
 	MaxMS  float64 `json:"max_ms"`
@@ -261,6 +262,7 @@ func writeText(w io.Writer, result pulse.Result) {
 	fmt.Fprintf(w, "Min latency: %v\n", result.Latency.Min)
 	fmt.Fprintf(w, "P50 latency: %v\n", result.Latency.P50)
 	fmt.Fprintf(w, "Mean latency: %v\n", result.Latency.Mean)
+	fmt.Fprintf(w, "P90 latency: %v\n", result.Latency.P90)
 	fmt.Fprintf(w, "P95 latency: %v\n", result.Latency.P95)
 	fmt.Fprintf(w, "P99 latency: %v\n", result.Latency.P99)
 	fmt.Fprintf(w, "Max latency: %v\n", result.Latency.Max)
@@ -323,6 +325,7 @@ func toJSONResult(result pulse.Result) jsonResult {
 			MinMS:  durationToMilliseconds(result.Latency.Min),
 			P50MS:  durationToMilliseconds(result.Latency.P50),
 			MeanMS: durationToMilliseconds(result.Latency.Mean),
+			P90MS:  durationToMilliseconds(result.Latency.P90),
 			P95MS:  durationToMilliseconds(result.Latency.P95),
 			P99MS:  durationToMilliseconds(result.Latency.P99),
 			MaxMS:  durationToMilliseconds(result.Latency.Max),

@@ -31,6 +31,7 @@ func New(phases []scheduler.Phase, scenario func(context.Context) (int, error), 
 // A non-nil error indicates scheduler failure or context cancellation.
 func (e *Engine) Run(ctx context.Context) (metrics.Result, error) {
 	aggregator := metrics.NewAggregator()
+	defer aggregator.Close()
 	startedAt := time.Now()
 	limiter := internal.NewLimiter(e.maxConcurrency)
 

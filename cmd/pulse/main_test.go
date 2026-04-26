@@ -24,6 +24,7 @@ type decodedJSONResult struct {
 		MinMS  float64 `json:"min_ms"`
 		P50MS  float64 `json:"p50_ms"`
 		MeanMS float64 `json:"mean_ms"`
+		P90MS  float64 `json:"p90_ms"`
 		P95MS  float64 `json:"p95_ms"`
 		P99MS  float64 `json:"p99_ms"`
 		MaxMS  float64 `json:"max_ms"`
@@ -66,6 +67,7 @@ func TestRunPrintsResults(t *testing.T) {
 				Max:  40 * time.Millisecond,
 				Mean: 25 * time.Millisecond,
 				P50:  20 * time.Millisecond,
+				P90:  32 * time.Millisecond,
 				P95:  35 * time.Millisecond,
 				P99:  38 * time.Millisecond,
 			},
@@ -97,6 +99,7 @@ func TestRunPrintsResults(t *testing.T) {
 		"Min latency: 10ms\n" +
 		"P50 latency: 20ms\n" +
 		"Mean latency: 25ms\n" +
+		"P90 latency: 32ms\n" +
 		"P95 latency: 35ms\n" +
 		"P99 latency: 38ms\n" +
 		"Max latency: 40ms\n" +
@@ -218,6 +221,7 @@ func TestRunDoesNotPrintResultsWhenExecutionFails(t *testing.T) {
 				Max:  300 * time.Millisecond,
 				Mean: 200 * time.Millisecond,
 				P50:  150 * time.Millisecond,
+				P90:  250 * time.Millisecond,
 				P95:  280 * time.Millisecond,
 				P99:  300 * time.Millisecond,
 			},
@@ -256,6 +260,7 @@ func TestRunPrintsJSON(t *testing.T) {
 				Max:  30 * time.Millisecond,
 				Mean: 20 * time.Millisecond,
 				P50:  18 * time.Millisecond,
+				P90:  25 * time.Millisecond,
 				P95:  28 * time.Millisecond,
 				P99:  30 * time.Millisecond,
 			},
@@ -298,7 +303,7 @@ func TestRunPrintsJSON(t *testing.T) {
 	if got.Summary.RPS != 1.5 {
 		t.Fatalf("expected rps 1.5, got %+v", got.Summary)
 	}
-	if got.Latency.P50MS != 18 || got.Latency.P95MS != 28 || got.Latency.P99MS != 30 {
+	if got.Latency.P50MS != 18 || got.Latency.P90MS != 25 || got.Latency.P95MS != 28 || got.Latency.P99MS != 30 {
 		t.Fatalf("expected latency ms fields, got %+v", got.Latency)
 	}
 	if got.StatusCodes["200"] != 2 || got.StatusCodes["500"] != 1 {
@@ -332,6 +337,7 @@ func TestRunWritesJSONToFile(t *testing.T) {
 				Max:  25 * time.Millisecond,
 				Mean: 15 * time.Millisecond,
 				P50:  14 * time.Millisecond,
+				P90:  22 * time.Millisecond,
 				P95:  24 * time.Millisecond,
 				P99:  25 * time.Millisecond,
 			},
@@ -378,6 +384,7 @@ func TestRunWritesJSONToFile(t *testing.T) {
 		"Min latency: 5ms\n" +
 		"P50 latency: 14ms\n" +
 		"Mean latency: 15ms\n" +
+		"P90 latency: 22ms\n" +
 		"P95 latency: 24ms\n" +
 		"P99 latency: 25ms\n" +
 		"Max latency: 25ms\n" +

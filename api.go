@@ -111,6 +111,7 @@ type LatencyStats struct {
 	Min  time.Duration
 	Mean time.Duration
 	P50  time.Duration
+	P90  time.Duration
 	P95  time.Duration
 	P99  time.Duration
 	Max  time.Duration
@@ -159,6 +160,7 @@ func Run(test Test) (Result, error) {
 			Min:  metricsResult.Latency.Min,
 			Mean: metricsResult.Latency.Mean,
 			P50:  metricsResult.Latency.P50,
+			P90:  metricsResult.Latency.P90,
 			P95:  metricsResult.Latency.P95,
 			P99:  metricsResult.Latency.P99,
 			Max:  metricsResult.Latency.Max,

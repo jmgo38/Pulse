@@ -10,8 +10,30 @@ import (
 	"algoryn.io/pulse/transport"
 )
 
+// histTol is a tolerance for histogram-derived percentiles (log buckets + interpolation).
+const histTol = 60 * time.Microsecond
+
+func assertDurationNear(t *testing.T, name string, want, got time.Duration) {
+	t.Helper()
+	d := want - got
+	if d < 0 {
+		d = -d
+	}
+	if d > histTol {
+		t.Fatalf("%s: want near %v, got %v (tol %v)", name, want, got, histTol)
+	}
+}
+
+// newTestAggregator returns an Aggregator and registers Close to avoid leaking the native engine.
+func newTestAggregator(t *testing.T) *Aggregator {
+	t.Helper()
+	a := NewAggregator()
+	t.Cleanup(func() { a.Close() })
+	return a
+}
+
 func TestAggregatorResult(t *testing.T) {
-	aggregator := NewAggregator()
+	aggregator := newTestAggregator(t)
 	aggregator.Record(10*time.Millisecond, 0, nil)
 	aggregator.Record(30*time.Millisecond, 0, errors.New("failed"))
 
@@ -41,15 +63,10 @@ func TestAggregatorResult(t *testing.T) {
 		t.Fatalf("expected mean 20ms, got %v", result.Latency.Mean)
 	}
 
-	if result.Latency.P50 != 10*time.Millisecond {
-		t.Fatalf("expected p50 10ms, got %v", result.Latency.P50)
-	}
-	if result.Latency.P95 != 30*time.Millisecond {
-		t.Fatalf("expected p95 30ms, got %v", result.Latency.P95)
-	}
-	if result.Latency.P99 != 30*time.Millisecond {
-		t.Fatalf("expected p99 30ms, got %v", result.Latency.P99)
-	}
+	assertDurationNear(t, "P50", 10*time.Millisecond, result.Latency.P50)
+	assertDurationNear(t, "P90", 30*time.Millisecond, result.Latency.P90)
+	assertDurationNear(t, "P95", 30*time.Millisecond, result.Latency.P95)
+	assertDurationNear(t, "P99", 30*time.Millisecond, result.Latency.P99)
 
 	if len(result.ErrorCounts) != 1 || result.ErrorCounts["unknown_error"] != 1 {
 		t.Fatalf("expected errorCounts unknown_error=1, got %+v", result.ErrorCounts)
@@ -60,7 +77,7 @@ func TestAggregatorResult(t *testing.T) {
 }
 
 func TestAggregatorConcurrentRecord(t *testing.T) {
-	aggregator := NewAggregator()
+	aggregator := newTestAggregator(t)
 
 	latencies := []time.Duration{
 		10 * time.Millisecond,
@@ -107,74 +124,30 @@ func TestAggregatorConcurrentRecord(t *testing.T) {
 		t.Fatalf("expected mean 25ms, got %v", result.Latency.Mean)
 	}
 
-	if result.Latency.P50 != 20*time.Millisecond {
-		t.Fatalf("expected p50 20ms, got %v", result.Latency.P50)
-	}
-	if result.Latency.P95 != 40*time.Millisecond {
-		t.Fatalf("expected p95 40ms, got %v", result.Latency.P95)
-	}
-	if result.Latency.P99 != 40*time.Millisecond {
-		t.Fatalf("expected p99 40ms, got %v", result.Latency.P99)
-	}
+	assertDurationNear(t, "P50", 20*time.Millisecond, result.Latency.P50)
+	assertDurationNear(t, "P90", 40*time.Millisecond, result.Latency.P90)
+	assertDurationNear(t, "P95", 40*time.Millisecond, result.Latency.P95)
+	assertDurationNear(t, "P99", 40*time.Millisecond, result.Latency.P99)
 
 	if result.ErrorCounts["unknown_error"] != 2 {
 		t.Fatalf("expected errorCounts unknown_error=2, got %+v", result.ErrorCounts)
 	}
 }
 
-func TestAggregatorRetainsAllLatencies(t *testing.T) {
-	a := NewAggregator()
-	a.Record(time.Millisecond, 0, nil)
-	a.Record(2*time.Millisecond, 0, nil)
-	a.Record(3*time.Millisecond, 0, errors.New("x"))
-
-	if len(a.latencies) != 3 {
-		t.Fatalf("expected 3 retained latencies, got %d", len(a.latencies))
-	}
-	if a.latencies[0] != time.Millisecond || a.latencies[1] != 2*time.Millisecond || a.latencies[2] != 3*time.Millisecond {
-		t.Fatalf("unexpected retained order or values: %v", a.latencies)
-	}
-}
-
-func TestPercentileFromSorted(t *testing.T) {
-	s := []time.Duration{
-		1 * time.Millisecond,
-		2 * time.Millisecond,
-		3 * time.Millisecond,
-		4 * time.Millisecond,
-		100 * time.Millisecond,
-	}
-	if got := percentileFromSorted(s, 50); got != 3*time.Millisecond {
-		t.Fatalf("p50: want 3ms, got %v", got)
-	}
-	if got := percentileFromSorted(s, 95); got != 100*time.Millisecond {
-		t.Fatalf("p95: want 100ms, got %v", got)
-	}
-	if got := percentileFromSorted(s, 99); got != 100*time.Millisecond {
-		t.Fatalf("p99: want 100ms, got %v", got)
-	}
-}
-
-func TestAggregatorResultDoesNotMutateRetainedLatencies(t *testing.T) {
-	a := NewAggregator()
+func TestAggregatorResultIdempotent(t *testing.T) {
+	a := newTestAggregator(t)
 	a.Record(30*time.Millisecond, 0, nil)
 	a.Record(10*time.Millisecond, 0, nil)
-	snapshot := append([]time.Duration(nil), a.latencies...)
 
-	_ = a.Result(time.Second)
-
-	if len(a.latencies) != len(snapshot) {
-		t.Fatalf("latencies length: want %d, got %d", len(snapshot), len(a.latencies))
-	}
-	for i := range snapshot {
-		if a.latencies[i] != snapshot[i] {
-			t.Fatalf("latencies mutated at %d: want %v, got %v", i, snapshot, a.latencies)
-		}
+	r1 := a.Result(time.Second)
+	r2 := a.Result(time.Second)
+	if r1.Latency.P50 != r2.Latency.P50 {
+		t.Fatalf("expected idempotent p50, got %v and %v", r1.Latency.P50, r2.Latency.P50)
 	}
 }
 
 func TestAggregatorStatusCountsOnSuccess(t *testing.T) {
-	a := NewAggregator()
+	a := newTestAggregator(t)
 	a.Record(time.Millisecond, 200, nil)
 	a.Record(time.Millisecond, 200, nil)
 	a.Record(time.Millisecond, 201, nil)
@@ -189,7 +162,7 @@ func TestAggregatorStatusCountsOnSuccess(t *testing.T) {
 }
 
 func TestAggregatorStatusCountsRecordedAlongsideError(t *testing.T) {
-	a := NewAggregator()
+	a := newTestAggregator(t)
 	a.Record(time.Millisecond, 500, &transport.HTTPStatusError{StatusCode: 500})
 
 	r := a.Result(time.Second)
@@ -205,7 +178,7 @@ func TestAggregatorStatusCountsRecordedAlongsideError(t *testing.T) {
 }
 
 func TestAggregatorErrorWithoutStatusCodeHasNoStatusCount(t *testing.T) {
-	a := NewAggregator()
+	a := newTestAggregator(t)
 	a.Record(time.Millisecond, 0, errors.New("network down"))
 
 	r := a.Result(time.Second)
@@ -218,7 +191,7 @@ func TestAggregatorErrorWithoutStatusCodeHasNoStatusCount(t *testing.T) {
 }
 
 func TestAggregatorRPS(t *testing.T) {
-	a := NewAggregator()
+	a := newTestAggregator(t)
 	for range 10 {
 		a.Record(time.Millisecond, 0, nil)
 	}
@@ -235,7 +208,7 @@ func TestAggregatorRPS(t *testing.T) {
 }
 
 func TestAggregatorFailedWhenStatusAtLeast400WithoutErr(t *testing.T) {
-	a := NewAggregator()
+	a := newTestAggregator(t)
 	a.Record(time.Millisecond, 404, nil)
 
 	r := a.Result(time.Second)
@@ -248,7 +221,7 @@ func TestAggregatorFailedWhenStatusAtLeast400WithoutErr(t *testing.T) {
 }
 
 func TestAggregatorResultReturnsCopiedMaps(t *testing.T) {
-	a := NewAggregator()
+	a := newTestAggregator(t)
 	a.Record(time.Millisecond, 200, nil)
 	r := a.Result(time.Second)
 	r.StatusCounts[200] = 99
@@ -260,7 +233,7 @@ func TestAggregatorResultReturnsCopiedMaps(t *testing.T) {
 }
 
 func TestAggregatorResultReturnsCopiedErrorCountsMap(t *testing.T) {
-	a := NewAggregator()
+	a := newTestAggregator(t)
 	a.Record(time.Millisecond, 0, errors.New("boom"))
 
 	r := a.Result(time.Second)
@@ -270,4 +243,12 @@ func TestAggregatorResultReturnsCopiedErrorCountsMap(t *testing.T) {
 	if r2.ErrorCounts["unknown_error"] != 1 {
 		t.Fatalf("internal errorCounts mutated via snapshot, got %+v", r2.ErrorCounts)
 	}
+}
+
+func TestAggregatorCloseIsIdempotent(t *testing.T) {
+	a := NewAggregator()
+	a.Record(time.Millisecond, 0, nil)
+	_ = a.Result(time.Second)
+	a.Close()
+	a.Close()
 }

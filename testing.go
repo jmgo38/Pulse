@@ -26,8 +26,8 @@ func RunT(t TB, test Test) Result {
 
 	t.Logf("pulse: total=%d failed=%d rps=%.2f duration=%v",
 		result.Total, result.Failed, result.RPS, result.Duration)
-	t.Logf("pulse: latency p50=%v p95=%v p99=%v",
-		result.Latency.P50, result.Latency.P95, result.Latency.P99)
+	t.Logf("pulse: latency p50=%v p90=%v p95=%v p99=%v",
+		result.Latency.P50, result.Latency.P90, result.Latency.P95, result.Latency.P99)
 
 	for _, outcome := range result.ThresholdOutcomes {
 		status := "PASS"

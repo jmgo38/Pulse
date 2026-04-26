@@ -187,14 +187,14 @@ func TestRunExecutesScenario(t *testing.T) {
 	}
 
 	l := got.Latency
-	if l.P50 <= 0 || l.P95 <= 0 || l.P99 <= 0 {
+	if l.P50 <= 0 || l.P90 <= 0 || l.P95 <= 0 || l.P99 <= 0 {
 		t.Fatalf("expected positive latency percentiles, got %+v", l)
 	}
 	if l.Min > l.P50 || l.P50 > l.Max {
 		t.Fatalf("P50 outside [min,max]: %+v", l)
 	}
-	if l.P50 > l.P95 || l.P95 > l.P99 {
-		t.Fatalf("expected P50 <= P95 <= P99, got %v %v %v", l.P50, l.P95, l.P99)
+	if l.P50 > l.P90 || l.P90 > l.P95 || l.P95 > l.P99 {
+		t.Fatalf("expected P50 <= P90 <= P95 <= P99, got %v %v %v %v", l.P50, l.P90, l.P95, l.P99)
 	}
 	if l.P99 > l.Max {
 		t.Fatalf("P99 above max: %+v", l)

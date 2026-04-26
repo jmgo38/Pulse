@@ -46,6 +46,7 @@ func ToRunEvent(result Result, passed bool, startedAt time.Time) fabricmetrics.R
 			Min:  result.Latency.Min,
 			Mean: result.Latency.Mean,
 			P50:  result.Latency.P50,
+			P90:  result.Latency.P90,
 			P95:  result.Latency.P95,
 			P99:  result.Latency.P99,
 			Max:  result.Latency.Max,
